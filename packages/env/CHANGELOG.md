@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+<<<<<<< HEAD
 ### Bug Fix
 
 -   Restrict `WP_TESTS_DOMAIN` constant to just hostname rather than an entire URL (e.g. it now excludes scheme, port, etc.) ([#41039](https://github.com/WordPress/gutenberg/pull/41039)).
@@ -10,6 +11,9 @@
 ### Enhancement
 -   Removed the need for quotation marks when passing options to `wp-env run`.
 -   Setting a `config` key to `null` will prevent adding the constant to `wp-config.php` even if a default value is defined by `wp-env`.
+=======
+- Restrict `WP_TESTS_DOMAIN` constant to just hostname rather than an entire URL (e.g. it now excludes scheme, port, etc.)
+>>>>>>> e2f23b2c81 (Clarify changelog entry)
 
 ## 4.7.0 (2022-05-18)
 

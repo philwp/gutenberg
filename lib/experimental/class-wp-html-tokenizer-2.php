@@ -156,7 +156,7 @@ class WP_HTML_Updater {
 
 			$index = 0;
 			foreach ( $sorted_diffs as $diff ) {
-				$pieces[] = substr( $this->html, $index, $diff->getFromIndex() );
+				$pieces[] = substr( $this->html, $index, $diff->getFromIndex() - $index );
 				$pieces[] = $diff->getSubstitution();
 				$index    = $diff->getToIndex();
 			}
@@ -181,16 +181,53 @@ class WP_HTML_Updater {
 		$this->caret = $position;
 	}
 
+	public function find_next_tag( $name_spec, $class_name_spec = null, $nth_match = 0 ) {
+		$matched = - 1;
+		while ( true ) {
+			$tag = $this->consume_next_tag();
+			if ( ! $tag ) {
+				break;
+			}
+			if ( ! $this->tag_matches( $tag, $name_spec, $class_name_spec ) ) {
+				$this->skip_through_attributes();
+				continue;
+			}
+			if ( ++ $matched === $nth_match ) {
+				break;
+			}
+		}
+
+		return $this;
+	}
+
+	private function tag_matches( $tag, $name_spec, $class_name_spec ) {
+		if ( ! $tag ) {
+			return false;
+		}
+		if ( $name_spec && $tag->getName() !== $name_spec ) {
+			return false;
+		}
+		if ( $class_name_spec ) {
+			$classes = $this->get_classes();
+			if ( ! in_array( $class_name_spec, $classes, true ) ) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
 	public function consume_next_tag() {
-		$this->current_tag       = null;
-		$this->parsed_attributes = array();
+		$this->current_tag         = null;
+		$this->parsed_attributes   = array();
+		$this->modified_attributes = array();
 
-		$result = $this->match(
-			'~<!--(?>.*?-->)|<!\[CDATA\[(?>.*?>)|<\?(?>.*?)>|<(?P<TAG>[a-z][^\t\x{0A}\x{0C} \/>]*)~mui'
-		);
-
-		if ( ! $result ) {
-			return $this->eof();
+		try {
+			$result = $this->match(
+				'~<!--(?>.*?-->)|<!\[CDATA\[(?>.*?>)|<\?(?>.*?)>|<(?P<TAG>[a-z][^\t\x{0A}\x{0C} \/>]*)~mui'
+			);
+		} catch ( Exception $e ) {
+			return;
 		}
 
 		$full_match = $result[0][0];
@@ -205,7 +242,7 @@ class WP_HTML_Updater {
 			$result[0][1]
 		);
 
-		return $this;
+		return $this->current_tag;
 	}
 
 	public function add_class( $new_class_name ) {
@@ -253,6 +290,9 @@ class WP_HTML_Updater {
 	}
 
 	public function create_attribute( $name, $value ) {
+		if ( ! $this->current_tag ) {
+			return $this;
+		}
 		$from_index        = $this->current_tag->getTagNameEndIndex();
 		$to_index          = $this->current_tag->getTagNameEndIndex();
 		$new_value         = $value;
@@ -306,8 +346,6 @@ class WP_HTML_Updater {
 	public function remove_attribute( $name ) {
 		$attr = $this->find_attribute( $name );
 		if ( $attr ) {
-			var_dump( $attr->getStartIndex() );
-			var_dump( $attr->getEndIndex() );
 			$this->diffs[] = new WP_Matcher_Diff(
 				$attr->getStartIndex(),
 				$attr->getEndIndex(),
@@ -332,9 +370,12 @@ class WP_HTML_Updater {
 		}
 	}
 
-	private function assert_can_update_attribute( $name ) {
-		if ( in_array( $name, $this->modified_attributes, true ) ) {
-			throw new Exception( 'This attribute is already being modified: ' . $name );
+	private function skip_through_attributes() {
+		while ( true ) {
+			$attr = $this->consume_next_attribute();
+			if ( ! $attr ) {
+				break;
+			}
 		}
 	}
 
@@ -385,24 +426,23 @@ class WP_HTML_Updater {
 
 		$attribute_name    = $name_result['NAME'][0];
 		$is_flag_attribute = false;
-		// There's neither an equals sign, nor a tag end after this attribute,
-		// it must be therefore a flag attribute followed by another attribute.
 		if ( empty( $name_result['IGNORED'] ) || $name_result['IGNORED'][1] === - 1 ) {
+			// There's neither an equals sign, nor a tag end after this attribute,
+			// it must be therefore a flag attribute followed by another attribute.
 			$this->advanceCaret( strlen( $full_name_match ) );
 			$is_flag_attribute = true;
-
+		} elseif ( '=' !== $name_result['IGNORED'][0] ) {
 			// There is no equal sign after the attribute name – this is a flag attribute
 			// followed by a tag closer.
-		} elseif ( '=' !== $name_result['IGNORED'][0] ) {
 			$this->advanceCaret( strlen( $full_name_match ) - strlen( $name_result['IGNORED'][0] ) );
 			$is_flag_attribute = true;
-			// Matched an attribute name followed by an equals sign, let's scan for the value.
 		} else {
+			// Matched an attribute name followed by an equals sign, let's scan for the value.
 			$this->advanceCaret( strlen( $full_name_match ) - strlen( $name_result['IGNORED'][0] ) );
 			$equals_result = $this->match(
-				'~(?P<EQUALS>[\x{09}\x{0a}\x{0c}\x{0d} ]*=[\x{09}\x{0a}\x{0c}\x{0d} ]*)(?:(?P<CLOSER>\/?>)|(?P<FIRST_CHAR>(.)))~miu'
+				'~(?P<EQUALS>[\x{09}\x{0a}\x{0c}\x{0d} ]*=)[\x{09}\x{0a}\x{0c}\x{0d} ]*(?:(?P<CLOSER>\/?>)|(?P<FIRST_CHAR>(.)))~miu'
 			);
-			$this->advanceCaret( strlen( $equals_result['EQUALS'][0] ) );
+			$this->setCaret( $equals_result['EQUALS'][1] + strlen( $equals_result['EQUALS'][0] ) );
 
 			// An equals sign followed by tag closer becomes a flag attribute.
 			// For example: <div attr=/> becomes <div attr />
@@ -425,7 +465,7 @@ class WP_HTML_Updater {
 		// At this point we know the equal sign is followed by a value. Let's capture it:
 		if ( ! in_array( $equals_result['FIRST_CHAR'][0], [ "'", '"' ], true ) ) {
 			$value_result = $this->match(
-				"~(?P<VALUE>[^=\/>\t\x{09}\x{0C} ]*)~miu"
+				"~\s*(?P<VALUE>[^=\/>\t\x{09}\x{0C} ]*)~miu"
 			);
 		} else {
 			$quote_character = $equals_result['FIRST_CHAR'][0];
@@ -435,7 +475,6 @@ class WP_HTML_Updater {
 		}
 
 		$this->advanceCaret( strlen( $value_result[0][0] ) );
-
 		$this->parsed_attributes[ $attribute_name ] = new WP_Attribute_Match(
 			$attribute_name,
 			$value_result['VALUE'][0],
@@ -466,7 +505,9 @@ class WP_HTML_Updater {
 
 }
 
-$html = '<div attr_3=\'3\' attr_1="1" attr_2 attr4=abc class="class names" /><img test123 class="boat" /><img class="boat 2" />';
+$html = '
+<div attr_3=\'3\' attr_1="1" attr_2 attr4=  abc =test class="class names" /><img test123 class="boat" /><img class="boat 2" />
+';
 
 function dump_attrs( $attrs ) {
 	$array = [];
@@ -477,22 +518,22 @@ function dump_attrs( $attrs ) {
 }
 
 $updater = new WP_HTML_Updater( $html );
-$updater->consume_next_tag()
+$updater->find_next_tag( 'div' )
         ->remove_attribute( 'attr4' )
-//        ->set_attribute( 'attr_2', function ( $old_value ) {
-//	        return "well well well";
-//        } )
+        ->set_attribute( 'attr_2', function ( $old_value ) {
+	        return "well well well";
+        } )
         ->add_class( 'prego' )
-//        ->remove_class( 'names' )
-//        ->set_attribute( 'attr9', function () {
-//	        return "hey ha";
-//        } )
-;
+        ->set_attribute( 'attr9', function () {
+	        return "hey ha";
+        } )
+        ->find_next_tag( 'img' )
+        ->remove_class( 'boat' );
 var_dump( $updater . '' );
 //dump_attrs( $updater->parsed_attributes );
 //print_r( $updater->diffs );
 die();
-//	->setAttribute( 'test123', '123' )
+//	->setAttribute( 'test123', '123' )x
 //	->removeAttribute( 'test123' )
 //	->findNext( 'img' )
 //	->setAttribute( 'test124', '123' )

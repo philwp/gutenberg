@@ -128,6 +128,30 @@ class WP_Matcher_Diff {
 class WP_HTML_Updater {
 
 	private $html;
+	/**
+	 * @var int
+	 */
+	private $caret;
+	/**
+	 * @var null
+	 */
+	private $current_tag;
+	/**
+	 * @var array
+	 */
+	private $parsed_attributes;
+	/**
+	 * @var array
+	 */
+	public $diffs;
+	/**
+	 * @var array
+	 */
+	private $modified_attributes;
+	/**
+	 * @var false
+	 */
+	private $new_string;
 
 	public function __construct( $html ) {
 		$this->html                = $html;
@@ -141,36 +165,21 @@ class WP_HTML_Updater {
 
 	public function __toString() {
 		if ( false === $this->new_string ) {
-			if ( ! count( $this->diffs ) ) {
-				$this->new_string = '';
-
-				return $this->new_string;
-			}
-			$sorted_diffs = [];
-			foreach ( $this->diffs as $diff ) {
-				$sorted_diffs[ $diff->getFromIndex() ] = $diff;
-			}
-			ksort( $sorted_diffs );
-			$sorted_diffs = array_values( $sorted_diffs );
-			var_dump( $sorted_diffs );
+			usort( $this->diffs, function ( $diff1, $diff2 ) {
+				return $diff1->getFromIndex() - $diff2->getFromIndex();
+			} );
 
 			$index = 0;
-			foreach ( $sorted_diffs as $diff ) {
+			foreach ( $this->diffs as $diff ) {
 				$pieces[] = substr( $this->html, $index, $diff->getFromIndex() - $index );
 				$pieces[] = $diff->getSubstitution();
 				$index    = $diff->getToIndex();
 			}
 			$pieces[]         = substr( $this->html, $index );
-			$this->new_string = implode( ' ', $pieces );
+			$this->new_string = implode( '', $pieces );
 		}
 
 		return $this->new_string;
-	}
-
-	protected function eof() {
-		$this->setCaret( strlen( $this->html ) );
-
-		return $this;
 	}
 
 	protected function advanceCaret( $length ) {
@@ -189,7 +198,7 @@ class WP_HTML_Updater {
 				break;
 			}
 			if ( ! $this->tag_matches( $tag, $name_spec, $class_name_spec ) ) {
-				$this->skip_through_attributes();
+				$this->skip_all_attributes();
 				continue;
 			}
 			if ( ++ $matched === $nth_match ) {
@@ -217,16 +226,18 @@ class WP_HTML_Updater {
 		return true;
 	}
 
-	public function consume_next_tag() {
+	private function consume_next_tag() {
 		$this->current_tag         = null;
 		$this->parsed_attributes   = array();
 		$this->modified_attributes = array();
 
 		try {
 			$result = $this->match(
-				'~<!--(?>.*?-->)|<!\[CDATA\[(?>.*?>)|<\?(?>.*?)>|<(?P<TAG>[a-z][^\t\x{0A}\x{0C} \/>]*)~mui'
+				'~<!--(?>.*?-->)|<!\[CDATA\[(?>.*?>)|<\?(?>.*?)>|<(?P<TAG>[a-z][^\x{09}\x{0a}\x{0c}\x{0d} \/>]*)~mui'
 			);
 		} catch ( Exception $e ) {
+			$this->setCaret( strlen( $this->html ) );
+
 			return;
 		}
 
@@ -236,7 +247,6 @@ class WP_HTML_Updater {
 		if ( ! isset( $result['TAG'] ) ) {
 			return $this->consume_next_tag();
 		}
-		$this->matches_buffer = array();
 		$this->current_tag    = new WP_Tag_Match(
 			$result['TAG'][0],
 			$result[0][1]
@@ -273,19 +283,13 @@ class WP_HTML_Updater {
 	}
 
 	public function set_attribute( $name, $value_or_callback ) {
-		if ( ! is_callable( $value_or_callback ) ) {
-			$value    = $value_or_callback;
-			$callback = function () use ( $value ) {
-				return $value;
-			};
-		} else {
-			$callback = $value_or_callback;
-		}
 		$attr = $this->find_attribute( $name );
 		if ( $attr ) {
-			return $this->update_attribute_if_exists( $name, $callback );
+			return $this->update_attribute_if_exists( $name, $value_or_callback );
 		} else {
-			return $this->create_attribute( $name, $callback( null ) );
+			$value = is_callable( $value_or_callback ) ? $value_or_callback( null ) : $value_or_callback;
+
+			return $this->create_attribute( $name, $value );
 		}
 	}
 
@@ -305,19 +309,11 @@ class WP_HTML_Updater {
 	}
 
 	public function update_attribute_if_exists( $name, $value_or_callback ) {
-		if ( ! is_callable( $value_or_callback ) ) {
-			$value    = $value_or_callback;
-			$callback = function () use ( $value ) {
-				return $value;
-			};
-		} else {
-			$callback = $value_or_callback;
-		}
 		$attr = $this->find_attribute( $name );
 		if ( $attr ) {
 			$from_index        = $attr->getStartIndex();
 			$to_index          = $attr->getEndIndex();
-			$new_value         = $callback( $attr->getValue() );
+			$new_value         = is_callable( $value_or_callback ) ? $value_or_callback( $attr->getValue() ) : $value_or_callback;
 			$escaped_new_value = $new_value; //esc_attr( $new_value );
 			$substitution      = "{$name}=\"{$escaped_new_value}\"";
 			$this->mark_attribute_as_updated( $name );
@@ -370,7 +366,7 @@ class WP_HTML_Updater {
 		}
 	}
 
-	private function skip_through_attributes() {
+	private function skip_all_attributes() {
 		while ( true ) {
 			$attr = $this->consume_next_attribute();
 			if ( ! $attr ) {
@@ -380,8 +376,11 @@ class WP_HTML_Updater {
 	}
 
 	private static function equals( $a, $b ) {
-		// @TODO
-		return $a === $b;
+		return self::comparable( $a ) === self::comparable( $b );
+	}
+
+	private static function comparable( $value ) {
+		return trim( strtolower( $value ) );
 	}
 
 	private function consume_next_attribute() {
@@ -393,94 +392,73 @@ class WP_HTML_Updater {
 				|
 				(?P<NAME>(?:
 					# Attribute names starting with an equals sign (yes, this is valid)
-					=[^=\/>\t\x{09}\x{0C} ]*
+					=[^=\/>\x{09}\x{0a}\x{0c}\x{0d} ]*
 					|
 					# Attribute names starting with anything other than an equals sign:
-					[^=\/>\t\x{09}\x{0C} ]+)
-				)
+					[^=\/>\x{09}\x{0a}\x{0c}\x{0d} ]+
+				))
+				# Optional whitespace
+				[\x{09}\x{0a}\x{0c}\x{0d} ]*
 				# Whatever terminates the attribute name
-				(?P<IGNORED>=|\/?>)?
+				(?P<POST_NAME>
+					(?P<EQUALS>=)
+					[\x{09}\x{0a}\x{0c}\x{0d} ]*
+					(?:\/?>|(?P<FIRST_VALUE_CHAR>(.)))
+					|
+					\/?>
+				)?
 			)
 			~miux';
 		try {
 			$name_result = $this->match( $regexp );
 		} catch ( \Exception $e ) {
-			$this->eof();
+			$this->setCaret( strlen( $this->html ) );
 
 			return false;
 		}
 
-		$full_name_match = $name_result[0][0];
-
 		// No attribute, just tag closer.
-		if ( ! empty( $name_result['CLOSER'] ) && $name_result['CLOSER'][1] !== - 1 ) {
-			$this->advanceCaret( strlen( $full_name_match ) );
+		if ( ! empty( $name_result['CLOSER'][0] ) ) {
+			$this->setCaret( $name_result['CLOSER'][1] );
 
 			return false;
 		}
 
 		// No closer and no attribute name – this should never ever happen.
-		if ( empty( $name_result['NAME'] ) || $name_result['NAME'][1] === - 1 ) {
+		if ( empty( $name_result['NAME'][0] ) ) {
 			throw new Exception( 'Something went wrong' );
 		}
 
-		$attribute_name    = $name_result['NAME'][0];
-		$is_flag_attribute = false;
-		if ( empty( $name_result['IGNORED'] ) || $name_result['IGNORED'][1] === - 1 ) {
-			// There's neither an equals sign, nor a tag end after this attribute,
-			// it must be therefore a flag attribute followed by another attribute.
-			$this->advanceCaret( strlen( $full_name_match ) );
-			$is_flag_attribute = true;
-		} elseif ( '=' !== $name_result['IGNORED'][0] ) {
-			// There is no equal sign after the attribute name – this is a flag attribute
-			// followed by a tag closer.
-			$this->advanceCaret( strlen( $full_name_match ) - strlen( $name_result['IGNORED'][0] ) );
-			$is_flag_attribute = true;
-		} else {
-			// Matched an attribute name followed by an equals sign, let's scan for the value.
-			$this->advanceCaret( strlen( $full_name_match ) - strlen( $name_result['IGNORED'][0] ) );
-			$equals_result = $this->match(
-				'~(?P<EQUALS>[\x{09}\x{0a}\x{0c}\x{0d} ]*=)[\x{09}\x{0a}\x{0c}\x{0d} ]*(?:(?P<CLOSER>\/?>)|(?P<FIRST_CHAR>(.)))~miu'
-			);
-			$this->setCaret( $equals_result['EQUALS'][1] + strlen( $equals_result['EQUALS'][0] ) );
+		$attribute_name = $name_result['NAME'][0];
+		if ( empty( $name_result['FIRST_VALUE_CHAR'][0] ) ) {
+			// The name is *not* followed by a value – it must be a flag attribute.
 
-			// An equals sign followed by tag closer becomes a flag attribute.
-			// For example: <div attr=/> becomes <div attr />
-			if ( ! empty( $equals_result['CLOSER'] ) && $equals_result['CLOSER'][1] !== - 1 ) {
-				$is_flag_attribute = true;
-			}
-		}
+			// Move the caret after the attribute name.
+			$this->setCaret( $name_result['NAME'][1] + strlen( $name_result['NAME'][0] ) );
 
-		if ( $is_flag_attribute ) {
 			$this->parsed_attributes[ $attribute_name ] = new WP_Attribute_Match(
 				$attribute_name,
 				true,
 				$name_result['NAME'][1],
-				$name_result['NAME'][1] + strlen( $attribute_name )
-			);
-
-			return $this->parsed_attributes[ $attribute_name ];
-		}
-
-		// At this point we know the equal sign is followed by a value. Let's capture it:
-		if ( ! in_array( $equals_result['FIRST_CHAR'][0], [ "'", '"' ], true ) ) {
-			$value_result = $this->match(
-				"~\s*(?P<VALUE>[^=\/>\t\x{09}\x{0C} ]*)~miu"
+				$name_result['NAME'][1] + strlen( $name_result['NAME'][0] )
 			);
 		} else {
-			$quote_character = $equals_result['FIRST_CHAR'][0];
-			$value_result    = $this->match(
-				"~\s*{$quote_character}(?P<VALUE>[^{$quote_character}]*){$quote_character}~miu"
+			// The name *is* followed by a value – let's consume it.
+
+			// Consume the value.
+			$this->setCaret( $name_result['FIRST_VALUE_CHAR'][1] );
+			$value_result = $this->match(
+				"~[\x{09}\x{0a}\x{0c}\x{0d} ]*(?:(?P<QUOTE>['\"])(?P<VALUE>.*?)\k<QUOTE>|(?P<VALUE>[^=\/>\x{09}\x{0a}\x{0c}\x{0d} ]*))~miuJ"
+			);
+
+			$this->advanceCaret( strlen( $value_result[0][0] ) );
+			$this->parsed_attributes[ $attribute_name ] = new WP_Attribute_Match(
+				$attribute_name,
+				$value_result['VALUE'][0],
+				$name_result['NAME'][1],
+				$value_result[0][1] + strlen( $value_result[0][0] )
 			);
 		}
-
-		$this->advanceCaret( strlen( $value_result[0][0] ) );
-		$this->parsed_attributes[ $attribute_name ] = new WP_Attribute_Match(
-			$attribute_name,
-			$value_result['VALUE'][0],
-			$name_result['NAME'][1],
-			$value_result[0][1] + strlen( $value_result[0][0] )
-		);
 
 		return $this->parsed_attributes[ $attribute_name ];
 	}
@@ -506,8 +484,12 @@ class WP_HTML_Updater {
 }
 
 $html = '
-<div attr_3=\'3\' attr_1="1" attr_2 attr4=  abc =test class="class names" /><img test123 class="boat" /><img class="boat 2" />
+<div attr_3=\'3\' attr_1="1" attr_2 attr4 =abc =test class="class names" /><img test123 class="boat" /><img class="boat 2" />
 ';
+
+//$html = '
+//<div lippa attr4 ="abc" />
+//';
 
 function dump_attrs( $attrs ) {
 	$array = [];
@@ -527,8 +509,9 @@ $updater->find_next_tag( 'div' )
         ->set_attribute( 'attr9', function () {
 	        return "hey ha";
         } )
-        ->find_next_tag( 'img' )
-        ->remove_class( 'boat' );
+        ->find_next_tag( 'img', null, 2 )
+        ->add_class( 'boat2' );
+//var_dump( $updater->diffs );
 var_dump( $updater . '' );
 //dump_attrs( $updater->parsed_attributes );
 //print_r( $updater->diffs );

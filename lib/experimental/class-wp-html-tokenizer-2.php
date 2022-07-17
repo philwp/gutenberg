@@ -1,38 +1,5 @@
 <?php
 
-class WP_Tag_Match {
-	private $name;
-	private $start_index;
-
-	/**
-	 * @param $name
-	 * @param $start_index
-	 */
-	public function __construct( $name, $start_index ) {
-		$this->name        = $name;
-		$this->start_index = $start_index;
-	}
-
-	/**
-	 * @return mixed
-	 */
-	public function getName() {
-		return $this->name;
-	}
-
-	/**
-	 * @return mixed
-	 */
-	public function getStartIndex() {
-		return $this->start_index;
-	}
-
-	public function getTagNameEndIndex() {
-		return $this->start_index + 1 + strlen( $this->name );
-	}
-
-}
-
 class WP_Attribute_Match {
 	private $name;
 	private $value;
@@ -136,6 +103,7 @@ class WP_HTML_Updater {
 	 * @var null
 	 */
 	private $current_tag;
+	private $current_tag_name_end_index;
 	/**
 	 * @var array
 	 */
@@ -154,13 +122,14 @@ class WP_HTML_Updater {
 	private $new_string;
 
 	public function __construct( $html ) {
-		$this->html                = $html;
-		$this->caret               = 0;
-		$this->current_tag         = null;
-		$this->parsed_attributes   = array();
-		$this->diffs               = array();
-		$this->modified_attributes = array();
-		$this->new_string          = false;
+		$this->html                       = $html;
+		$this->caret                      = 0;
+		$this->current_tag                = null;
+		$this->current_tag_name_end_index = null;
+		$this->parsed_attributes          = array();
+		$this->diffs                      = array();
+		$this->modified_attributes        = array();
+		$this->new_string                 = false;
 	}
 
 	public function __toString() {
@@ -213,7 +182,7 @@ class WP_HTML_Updater {
 		if ( ! $tag ) {
 			return false;
 		}
-		if ( $name_spec && $tag->getName() !== $name_spec ) {
+		if ( $name_spec && ! self::equals( $tag, $name_spec ) ) {
 			return false;
 		}
 		if ( $class_name_spec ) {
@@ -227,9 +196,10 @@ class WP_HTML_Updater {
 	}
 
 	private function consume_next_tag() {
-		$this->current_tag         = null;
-		$this->parsed_attributes   = array();
-		$this->modified_attributes = array();
+		$this->current_tag                = null;
+		$this->current_tag_name_end_index = null;
+		$this->parsed_attributes          = array();
+		$this->modified_attributes        = array();
 
 		try {
 			$result = $this->match(
@@ -247,10 +217,8 @@ class WP_HTML_Updater {
 		if ( ! isset( $result['TAG'] ) ) {
 			return $this->consume_next_tag();
 		}
-		$this->current_tag    = new WP_Tag_Match(
-			$result['TAG'][0],
-			$result[0][1]
-		);
+		$this->current_tag                = $result['TAG'][0];
+		$this->current_tag_name_end_index = $result[0][1] + strlen( $result['TAG'][0] ) + 1;
 
 		return $this->current_tag;
 	}
@@ -297,8 +265,8 @@ class WP_HTML_Updater {
 		if ( ! $this->current_tag ) {
 			return $this;
 		}
-		$from_index        = $this->current_tag->getTagNameEndIndex();
-		$to_index          = $this->current_tag->getTagNameEndIndex();
+		$from_index        = $this->current_tag_name_end_index;
+		$to_index          = $this->current_tag_name_end_index;
 		$new_value         = $value;
 		$escaped_new_value = $new_value; //esc_attr( $new_value );
 		$substitution      = " {$name}=\"{$escaped_new_value}\"";

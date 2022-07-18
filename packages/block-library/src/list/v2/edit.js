@@ -132,6 +132,7 @@ function Edit( { attributes, setAttributes, clientId } ) {
 		allowedBlocks: [ 'core/list-item' ],
 		template: TEMPLATE,
 		templateInsertUpdatesSelection: true,
+		__unstableRemoveEmpty: true,
 	} );
 	useMigrateOnLoad( attributes, clientId );
 	const { ordered, reversed, start } = attributes;

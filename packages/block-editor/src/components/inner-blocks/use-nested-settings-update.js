@@ -34,6 +34,7 @@ import { getLayoutType } from '../../layouts';
  * @param {string}               orientation                The direction in which the block
  *                                                          should face.
  * @param {Object}               layout                     The layout object for the block container.
+ * @param {boolean}              __unstableRemoveEmpty
  */
 export default function useNestedSettingsUpdate(
 	clientId,
@@ -43,7 +44,8 @@ export default function useNestedSettingsUpdate(
 	templateLock,
 	captureToolbars,
 	orientation,
-	layout
+	layout,
+	__unstableRemoveEmpty
 ) {
 	const { updateBlockListSettings } = useDispatch( blockEditorStore );
 
@@ -70,6 +72,7 @@ export default function useNestedSettingsUpdate(
 			allowedBlocks: _allowedBlocks,
 			templateLock:
 				templateLock === undefined ? parentLock : templateLock,
+			__unstableRemoveEmpty,
 		};
 
 		// These values are not defined for RN, so only include them if they

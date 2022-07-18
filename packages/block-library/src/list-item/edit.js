@@ -58,6 +58,7 @@ export default function ListItemEdit( {
 	setAttributes,
 	mergeBlocks,
 	onReplace,
+	onRemove,
 	clientId,
 } ) {
 	const { placeholder, content } = attributes;
@@ -89,6 +90,7 @@ export default function ListItemEdit( {
 					onSplit={ onSplit }
 					onMerge={ mergeBlocks }
 					onReplace={ onReplace }
+					onRemove={ onRemove }
 				/>
 				{ innerBlocksProps.children }
 			</li>

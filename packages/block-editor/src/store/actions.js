@@ -1165,9 +1165,18 @@ export const removeBlocks =
 
 		dispatch( { type: 'REMOVE_BLOCKS', clientIds } );
 
-		// To avoid a focus loss when removing the last block, assure there is
-		// always a default block if the last of the blocks have been removed.
-		dispatch( ensureDefaultBlock() );
+		const blockOrder = select.getBlockOrder( rootClientId );
+		const { __unstableRemoveEmpty } =
+			select.getBlockListSettings( rootClientId ) || {};
+
+		if ( blockOrder.length === 0 && __unstableRemoveEmpty ) {
+			dispatch( { type: 'REMOVE_BLOCKS', clientIds: [ rootClientId ] } );
+		} else {
+			// To avoid a focus loss when removing the last block, assure there
+			// is always a default block if the last of the blocks have been
+			// removed.
+			dispatch( ensureDefaultBlock() );
+		}
 	};
 
 /**

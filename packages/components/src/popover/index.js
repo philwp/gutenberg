@@ -50,6 +50,8 @@ const SLOT_NAME = 'Popover';
 
 const slotNameContext = createContext();
 
+// Converts the `Popover`'s legacy "position" prop to the
+// new "placement" prop (used by `gloating-ui`).
 const positionToPlacement = ( position ) => {
 	const [ x, y, z ] = position.split( ' ' );
 
@@ -66,6 +68,8 @@ const positionToPlacement = ( position ) => {
 	return y;
 };
 
+// Given the placement, compute the animation origin used for the entrance
+// animation. The origin should the the "opposite" of the placement.
 const placementToAnimationOrigin = ( placement ) => {
 	const [ placementX, placementY ] = placement.split( '-' );
 
@@ -229,12 +233,17 @@ const Popover = (
 	} );
 
 	const {
+		// Positioning coordinates
 		x,
 		y,
+		// Callback refs *not regular refs) This allows the position to be updated
+		// when either elements change.
 		reference,
 		floating,
-		strategy,
+		// Object with "regular" refs to both "reference" and "floating"
 		refs,
+		// Type of CSS position property to use (absolute or fixed)
+		strategy,
 		update,
 		placement: computedPlacement,
 		middlewareData: { arrow: arrowData = {} },
@@ -369,6 +378,7 @@ const Popover = (
 					  }
 			}
 		>
+			{ /* Prevents scroll on the document */ }
 			{ isExpanded && <ScrollLock /> }
 			{ isExpanded && (
 				<div className="components-popover__header">

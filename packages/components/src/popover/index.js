@@ -164,31 +164,7 @@ const Popover = (
 		return document;
 	}, [ anchorRef, anchorRect, getAnchorRect ] );
 
-	/**
-	 * Offsets the position of the popover when the anchor is inside an iframe.
-	 */
-	const frameOffset = useMemo( () => {
-		const { defaultView } = ownerDocument;
-		const { frameElement } = defaultView;
-
-		if ( ! frameElement || ownerDocument === document ) {
-			return undefined;
-		}
-
-		const iframeRect = frameElement.getBoundingClientRect();
-		return {
-			name: 'iframeOffset',
-			fn( { x, y } ) {
-				return {
-					x: x + iframeRect.left,
-					y: y + iframeRect.top,
-				};
-			},
-		};
-	}, [ ownerDocument ] );
-
 	const middleware = [
-		frameOffset,
 		offset ? offsetMiddleware( offset ) : undefined,
 		__unstableForcePosition ? undefined : flip(),
 		__unstableForcePosition

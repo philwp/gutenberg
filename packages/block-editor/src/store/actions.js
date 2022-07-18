@@ -1159,6 +1159,10 @@ export const removeBlocks =
 			return;
 		}
 
+		if ( selectPrevious ) {
+			dispatch.selectPreviousBlock( clientIds[ 0 ] );
+		}
+
 		dispatch( { type: 'REMOVE_BLOCKS', clientIds } );
 
 		const blockOrder = select.getBlockOrder( rootClientId );

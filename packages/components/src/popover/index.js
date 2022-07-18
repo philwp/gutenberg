@@ -104,7 +104,7 @@ const Popover = (
 		noArrow = true,
 		isAlternate,
 		position,
-		placement = 'bottom-start',
+		placement: placementProp = 'bottom-start',
 		offset,
 		focusOnMount = 'firstElement',
 		anchorRef,
@@ -132,9 +132,10 @@ const Popover = (
 	const isMobileViewport = useViewportMatch( 'medium', '<' );
 	const isExpanded = expandOnMobile && isMobileViewport;
 	const hasArrow = ! isExpanded && ! noArrow;
-	const usedPlacement = position
+
+	const normalizedPlacementProp = position
 		? positionToPlacement( position )
-		: placement;
+		: placementProp;
 
 	const ownerDocument = useMemo( () => {
 		if ( anchorRef?.top ) {
@@ -181,7 +182,7 @@ const Popover = (
 		};
 	}, [ ownerDocument ] );
 
-	const middlewares = [
+	const middleware = [
 		frameOffset,
 		offset ? offsetMiddleware( offset ) : undefined,
 		__unstableForcePosition ? undefined : flip(),
@@ -234,18 +235,15 @@ const Popover = (
 		strategy,
 		refs,
 		update,
-		placement: placementData,
+		placement: computedPlacement,
 		middlewareData: { arrow: arrowData = {} },
-	} = useFloating( {
-		placement: usedPlacement,
-		middleware: middlewares,
-	} );
+	} = useFloating( { placement: normalizedPlacementProp, middleware } );
 	const staticSide = {
 		top: 'bottom',
 		right: 'left',
 		bottom: 'top',
 		left: 'right',
-	}[ placementData.split( '-' )[ 0 ] ];
+	}[ computedPlacement.split( '-' )[ 0 ] ];
 	const mergedRefs = useMergeRefs( [ floating, dialogRef, ref ] );
 
 	// Updates references
@@ -332,7 +330,7 @@ const Popover = (
 		!! animate &&
 		getAnimateClassName( {
 			type: 'appear',
-			origin: placementToAnimationOrigin( placementData ),
+			origin: placementToAnimationOrigin( computedPlacement ),
 		} );
 
 	// Disable reason: We care to capture the _bubbled_ events from inputs

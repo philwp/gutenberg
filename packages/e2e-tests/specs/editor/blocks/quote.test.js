@@ -147,4 +147,15 @@ describe( 'Quote', () => {
 		// Expect the paragraph to be deleted.
 		expect( await getEditedPostContent() ).toMatchSnapshot();
 	} );
+
+	it( 'can be removed', async () => {
+		await clickBlockAppender();
+		await page.keyboard.type( 'a' );
+		await insertBlock( 'Quote' );
+		await page.keyboard.press( 'Backspace' );
+		await page.keyboard.type( 'b' );
+
+		// Expect "ab" in the paragraph.
+		expect( await getEditedPostContent() ).toMatchSnapshot();
+	} );
 } );

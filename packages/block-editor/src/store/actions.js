@@ -1159,10 +1159,6 @@ export const removeBlocks =
 			return;
 		}
 
-		if ( selectPrevious ) {
-			dispatch.selectPreviousBlock( clientIds[ 0 ] );
-		}
-
 		dispatch( { type: 'REMOVE_BLOCKS', clientIds } );
 
 		const blockOrder = select.getBlockOrder( rootClientId );
@@ -1170,6 +1166,10 @@ export const removeBlocks =
 			select.getBlockListSettings( rootClientId ) || {};
 
 		if ( blockOrder.length === 0 && __unstableRemoveEmpty ) {
+			if ( selectPrevious ) {
+				dispatch.selectPreviousBlock( rootClientId );
+			}
+
 			dispatch( { type: 'REMOVE_BLOCKS', clientIds: [ rootClientId ] } );
 		} else {
 			// To avoid a focus loss when removing the last block, assure there

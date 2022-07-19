@@ -188,47 +188,6 @@ class WP_HTML_Updater {
 		return true;
 	}
 
-	private function consume_next_tag() {
-		try {
-			$result = $this->match(
-				'~<!--(?>.*?-->)|<!\[CDATA\[(?>.*?>)|<\?(?>.*?)>|<(?P<TAG>[a-z][^\x{09}\x{0a}\x{0c}\x{0d} \/>]*)~mui'
-			);
-		} catch ( Exception $e ) {
-			$this->finish_parsing();
-
-			return;
-		}
-
-		$this->moveCaretAfter( $result[0] );
-		if ( ! isset( $result['TAG'] ) ) {
-			return $this->consume_next_tag();
-		}
-		$this->current_tag                = $result['TAG'][0];
-		$this->current_tag_name_end_index = $result[0][1] + strlen( $result['TAG'][0] ) + 1;
-
-		return $this->current_tag;
-	}
-
-	public function add_class( $class_name ) {
-		$this->get_classes();
-		if ( array_key_exists( $class_name, $this->new_classnames ) ) {
-			return $this;
-		}
-
-		$this->new_classnames[ $class_name ] = true;
-		$this->classnames_modified           = true;
-
-		return $this;
-	}
-
-	public function remove_class( $class_name ) {
-		$this->get_classes();
-		unset( $this->new_classnames[ $class_name ] );
-		$this->classnames_modified = true;
-
-		return $this;
-	}
-
 	protected function finish_processing_current_tag() {
 		if ( ! $this->current_tag ) {
 			return;
@@ -261,6 +220,26 @@ class WP_HTML_Updater {
 		}
 	}
 
+	public function add_class( $class_name ) {
+		$this->get_classes();
+		if ( array_key_exists( $class_name, $this->new_classnames ) ) {
+			return $this;
+		}
+
+		$this->new_classnames[ $class_name ] = true;
+		$this->classnames_modified           = true;
+
+		return $this;
+	}
+
+	public function remove_class( $class_name ) {
+		$this->get_classes();
+		unset( $this->new_classnames[ $class_name ] );
+		$this->classnames_modified = true;
+
+		return $this;
+	}
+
 	public function create_attribute( $name, $value ) {
 		if ( ! $this->current_tag ) {
 			return $this;
@@ -275,12 +254,12 @@ class WP_HTML_Updater {
 		return $this;
 	}
 
-	public function update_attribute_if_exists( $name, $new_value ) {
+	public function update_attribute_if_exists( $name, $value ) {
 		$attr = $this->find_attribute( $name );
 		if ( $attr ) {
 			$from_index        = $attr->getStartIndex();
 			$to_index          = $attr->getEndIndex();
-			$escaped_new_value = $new_value; //esc_attr( $new_value );
+			$escaped_new_value = $value; //esc_attr( $new_value );
 			$substitution      = "{$name}=\"{$escaped_new_value}\"";
 			$this->addDiff( $name, new WP_Matcher_Diff( $from_index, $to_index, $substitution ) );
 		}
@@ -315,7 +294,9 @@ class WP_HTML_Updater {
 			if ( ! $class || ! $class->getValue() ) {
 				$this->new_classnames = [];
 			} else {
-				$this->new_classnames = array_flip( preg_split( '~\s+~', $class->getValue() ) );
+				$classes              = preg_split( '~\s+~', $class->getValue() );
+				$classes              = array_map( [ $this, 'comparable' ], $classes );
+				$this->new_classnames = array_flip( $classes );
 			}
 		}
 
@@ -326,35 +307,42 @@ class WP_HTML_Updater {
 		if ( array_key_exists( $name, $this->parsed_attributes ) ) {
 			return $this->parsed_attributes[ $name ];
 		}
-		while ( true ) {
+		do {
 			$attr = $this->consume_next_attribute();
-			if ( ! $attr ) {
-				break;
-			} elseif ( self::equals( $attr->getName(), $name ) ) {
+			if ( $attr && self::equals( $attr->getName(), $name ) ) {
 				return $attr;
 			}
-		}
+		} while ( $attr );
 	}
 
 	private function skip_all_attributes() {
-		while ( true ) {
+		do {
 			$attr = $this->consume_next_attribute();
-			if ( ! $attr ) {
-				break;
-			}
+		} while ( $attr );
+	}
+
+	private function consume_next_tag() {
+		$result = $this->match(
+			'~<!--(?>.*?-->)|<!\[CDATA\[(?>.*?>)|<\?(?>.*?)>|<(?P<TAG>[a-z][^\x{09}\x{0a}\x{0c}\x{0d} \/>]*)~mui'
+		);
+		if ( ! $result ) {
+			$this->finish_parsing();
+
+			return false;
 		}
-	}
 
-	private static function equals( $a, $b ) {
-		return self::comparable( $a ) === self::comparable( $b );
-	}
+		$this->moveCaretAfter( $result[0] );
+		if ( ! isset( $result['TAG'] ) ) {
+			return $this->consume_next_tag();
+		}
+		$this->current_tag                = $result['TAG'][0];
+		$this->current_tag_name_end_index = $result[0][1] + strlen( $result['TAG'][0] ) + 1;
 
-	private static function comparable( $value ) {
-		return trim( strtolower( $value ) );
+		return $this->current_tag;
 	}
 
 	private function consume_next_attribute() {
-		$regexp = '~
+		$regexp      = '~
 			[\x{09}\x{0a}\x{0c}\x{0d} ]+ # Preceeding whitespace
 			(?:
 				# Either a tag end, or an attribute:
@@ -379,9 +367,8 @@ class WP_HTML_Updater {
 				)?
 			)
 			~miux';
-		try {
-			$name_result = $this->match( $regexp );
-		} catch ( \Exception $e ) {
+		$name_result = $this->match( $regexp );
+		if ( ! $name_result ) {
 			$this->finish_parsing();
 
 			return false;
@@ -389,65 +376,77 @@ class WP_HTML_Updater {
 
 		// No attribute, just tag closer.
 		if ( ! empty( $name_result['CLOSER'][0] ) ) {
-			$this->moveCaretBefore( $name_result['CLOSER'] );
+			return false;
+		}
+
+		$value_specified = ! empty( $name_result['FIRST_VALUE_CHAR'][0] );
+
+		$match = $value_specified
+			? $this->consume_value_attribute( $name_result )
+			: $this->consume_flag_attribute( $name_result );
+
+		if ( ! $match ) {
+			$this->finish_parsing();
 
 			return false;
 		}
 
-		// No closer and no attribute name – this should never ever happen.
-		if ( empty( $name_result['NAME'][0] ) ) {
-			throw new Exception( 'Something went wrong' );
-		}
+		$this->parsed_attributes[ $match->getName() ] = $match;
 
-		$attribute_name = $name_result['NAME'][0];
-		if ( empty( $name_result['FIRST_VALUE_CHAR'][0] ) ) {
-			// The name is *not* followed by a value – it must be a flag attribute.
-
-			// Move the caret after the attribute name.
-			$this->moveCaretAfter( $name_result['NAME'] );
-
-			$this->parsed_attributes[ $attribute_name ] = new WP_Attribute_Match(
-				$attribute_name,
-				true,
-				$name_result['NAME'][1],
-				$name_result['NAME'][1] + strlen( $name_result['NAME'][0] )
-			);
-		} else {
-			// The name *is* followed by a value – let's consume it.
-
-			// Consume the value.
-			$this->moveCaretBefore( $name_result['FIRST_VALUE_CHAR'] );
-			$value_result = $this->match(
-				"~[\x{09}\x{0a}\x{0c}\x{0d} ]*(?:(?P<QUOTE>['\"])(?P<VALUE>.*?)\k<QUOTE>|(?P<VALUE>[^=\/>\x{09}\x{0a}\x{0c}\x{0d} ]*))~miuJ"
-			);
-
-			$this->moveCaretAfter( $value_result[0] );
-			$this->parsed_attributes[ $attribute_name ] = new WP_Attribute_Match(
-				$attribute_name,
-				$value_result['VALUE'][0],
-				$name_result['NAME'][1],
-				$value_result[0][1] + strlen( $value_result[0][0] )
-			);
-		}
-
-		return $this->parsed_attributes[ $attribute_name ];
+		return $match;
 	}
 
+	private function consume_value_attribute( $name_match ) {
+		$this->moveCaretBefore( $name_match['FIRST_VALUE_CHAR'] );
+		$value_result = $this->match(
+			"~[\x{09}\x{0a}\x{0c}\x{0d} ]*(?:(?P<QUOTE>['\"])(?P<VALUE>.*?)\k<QUOTE>|(?P<VALUE>[^=\/>\x{09}\x{0a}\x{0c}\x{0d} ]*))~miuJ"
+		);
+		if ( empty( $value_result['VALUE'][0] ) ) {
+			$this->finish_parsing();
+
+			return false;
+		}
+
+		$this->moveCaretAfter( $value_result[0] );
+
+		return new WP_Attribute_Match(
+			$name_match['NAME'][0],
+			$value_result['VALUE'][0],
+			$this->indexBefore( $name_match['NAME'] ),
+			$this->indexAfter( $value_result[0] )
+		);
+	}
+
+	private function consume_flag_attribute( $name_match ) {
+		$this->moveCaretAfter( $name_match['NAME'] );
+
+		return new WP_Attribute_Match(
+			$name_match['NAME'][0],
+			true,
+			$this->indexBefore( $name_match['NAME'] ),
+			$this->indexAfter( $name_match['NAME'] )
+		);
+	}
 
 	protected function match( $regexp ) {
 		$matches = null;
-		$result  = preg_match(
+		preg_match(
 			$regexp,
 			$this->html,
 			$matches,
 			PREG_OFFSET_CAPTURE,
 			$this->caret
 		);
-		if ( 1 !== $result ) {
-			throw new Exception( 'Something went wrong' );
-		}
 
 		return $matches;
+	}
+
+	private static function equals( $a, $b ) {
+		return self::comparable( $a ) === self::comparable( $b );
+	}
+
+	private static function comparable( $value ) {
+		return trim( strtolower( $value ) );
 	}
 
 	protected function finish_parsing() {
@@ -455,11 +454,19 @@ class WP_HTML_Updater {
 	}
 
 	protected function moveCaretBefore( $match ) {
-		$this->caret = $match[1];
+		$this->caret = $this->indexBefore( $match );
 	}
 
 	protected function moveCaretAfter( $match ) {
-		$this->caret = $match[1] + strlen( $match[0] );
+		$this->caret = $this->indexAfter( $match );
+	}
+
+	protected function indexBefore( $match ) {
+		return $match[1];
+	}
+
+	protected function indexAfter( $match ) {
+		return $match[1] + strlen( $match[0] );
 	}
 
 }

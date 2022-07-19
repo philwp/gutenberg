@@ -103,6 +103,8 @@ class WP_HTML_Updater {
 	 * @var null
 	 */
 	private $current_tag;
+	private $new_classnames;
+	private $classnames_modified;
 	private $current_tag_name_end_index;
 	/**
 	 * @var array
@@ -122,18 +124,16 @@ class WP_HTML_Updater {
 	private $new_string;
 
 	public function __construct( $html ) {
-		$this->html                       = $html;
-		$this->caret                      = 0;
-		$this->current_tag                = null;
-		$this->current_tag_name_end_index = null;
-		$this->parsed_attributes          = array();
-		$this->diffs                      = array();
-		$this->modified_attributes        = array();
-		$this->new_string                 = false;
+		$this->html       = $html;
+		$this->diffs      = array();
+		$this->caret      = 0;
+		$this->new_string = false;
+		$this->reset();
 	}
 
 	public function __toString() {
 		if ( false === $this->new_string ) {
+			$this->after_tag();
 			usort( $this->diffs, function ( $diff1, $diff2 ) {
 				return $diff1->getFromIndex() - $diff2->getFromIndex();
 			} );
@@ -152,6 +152,7 @@ class WP_HTML_Updater {
 	}
 
 	public function find_next_tag( $name_spec, $class_name_spec = null, $nth_match = 0 ) {
+		$this->after_tag();
 		$matched = - 1;
 		while ( true ) {
 			$tag = $this->consume_next_tag();
@@ -188,17 +189,12 @@ class WP_HTML_Updater {
 	}
 
 	private function consume_next_tag() {
-		$this->current_tag                = null;
-		$this->current_tag_name_end_index = null;
-		$this->parsed_attributes          = array();
-		$this->modified_attributes        = array();
-
 		try {
 			$result = $this->match(
 				'~<!--(?>.*?-->)|<!\[CDATA\[(?>.*?>)|<\?(?>.*?)>|<(?P<TAG>[a-z][^\x{09}\x{0a}\x{0c}\x{0d} \/>]*)~mui'
 			);
 		} catch ( Exception $e ) {
-			$this->finishParsing();
+			$this->finish_parsing();
 
 			return;
 		}
@@ -213,31 +209,47 @@ class WP_HTML_Updater {
 		return $this->current_tag;
 	}
 
-	public function add_class( $new_class_name ) {
-		$current_classes = $this->get_classes();
-		if ( in_array( $new_class_name, $current_classes, true ) ) {
+	public function add_class( $class_name ) {
+		$this->get_classes();
+		if ( array_key_exists( $class_name, $this->new_classnames ) ) {
 			return $this;
 		}
 
-		$current_classes[] = $new_class_name;
+		$this->new_classnames[ $class_name ] = true;
+		$this->classnames_modified           = true;
 
-		return $this->set_attribute( 'class', implode( ' ', $current_classes ) );
+		return $this;
 	}
 
-	public function remove_class( $removed_class_name ) {
-		$classes = $this->get_classes();
-		if ( ! count( $classes ) ) {
-			return $this;
-		}
+	public function remove_class( $class_name ) {
+		$this->get_classes();
+		unset( $this->new_classnames[ $class_name ] );
+		$this->classnames_modified = true;
 
-		$new_class_names = [];
-		foreach ( $this->get_classes() as $class_name ) {
-			if ( ! self::equals( $class_name, $removed_class_name ) ) {
-				$new_class_names[] = $class_name;
+		return $this;
+	}
+
+	protected function reset() {
+		$this->current_tag                = null;
+		$this->current_tag_name_end_index = null;
+		$this->parsed_attributes          = array();
+		$this->modified_attributes        = array();
+		$this->new_classnames             = null;
+		$this->classnames_modified        = false;
+	}
+
+	protected function after_tag() {
+		if ( ! $this->current_tag ) {
+			return;
+		}
+		if ( $this->classnames_modified ) {
+			if ( count( $this->new_classnames ) ) {
+				$this->set_attribute( 'class', implode( ' ', array_keys( $this->new_classnames ) ) );
+			} else {
+				$this->remove_attribute( 'class' );
 			}
 		}
-
-		return $this->update_attribute_if_exists( 'class', implode( ' ', $new_class_names ) );
+		$this->reset();
 	}
 
 	public function set_attribute( $name, $value ) {
@@ -258,8 +270,7 @@ class WP_HTML_Updater {
 		$new_value         = $value;
 		$escaped_new_value = $new_value; //esc_attr( $new_value );
 		$substitution      = " {$name}=\"{$escaped_new_value}\"";
-		$this->mark_attribute_as_updated( $name );
-		$this->diffs[] = new WP_Matcher_Diff( $from_index, $to_index, $substitution );
+		$this->addDiff( $name, new WP_Matcher_Diff( $from_index, $to_index, $substitution ) );
 
 		return $this;
 	}
@@ -271,40 +282,44 @@ class WP_HTML_Updater {
 			$to_index          = $attr->getEndIndex();
 			$escaped_new_value = $new_value; //esc_attr( $new_value );
 			$substitution      = "{$name}=\"{$escaped_new_value}\"";
-			$this->mark_attribute_as_updated( $name );
-			$this->diffs[] = new WP_Matcher_Diff( $from_index, $to_index, $substitution );
+			$this->addDiff( $name, new WP_Matcher_Diff( $from_index, $to_index, $substitution ) );
 		}
 
 		return $this;
-	}
-
-	private function mark_attribute_as_updated( $name ) {
-		if ( in_array( $name, $this->modified_attributes, true ) ) {
-			throw new Exception( 'nonono' );
-		}
-		$this->modified_attributes[] = $name;
-	}
-
-	private function get_classes() {
-		$class = $this->find_attribute( 'class' );
-		if ( ! $class || ! $class->getValue() ) {
-			return [];
-		}
-
-		return preg_split( '~\s+~', $class->getValue() );
 	}
 
 	public function remove_attribute( $name ) {
 		$attr = $this->find_attribute( $name );
 		if ( $attr ) {
-			$this->diffs[] = new WP_Matcher_Diff(
+			$this->addDiff( $name, new WP_Matcher_Diff(
 				$attr->getStartIndex(),
 				$attr->getEndIndex(),
 				''
-			);
+			) );
 		}
 
 		return $this;
+	}
+
+	private function addDiff( $attribute_name, $diff ) {
+		if ( in_array( $attribute_name, $this->modified_attributes, true ) ) {
+			throw new Exception( 'nonono' );
+		}
+		$this->modified_attributes[] = $attribute_name;
+		$this->diffs[]               = $diff;
+	}
+
+	private function get_classes() {
+		if ( $this->new_classnames === null ) {
+			$class = $this->find_attribute( 'class' );
+			if ( ! $class || ! $class->getValue() ) {
+				$this->new_classnames = [];
+			} else {
+				$this->new_classnames = array_flip( preg_split( '~\s+~', $class->getValue() ) );
+			}
+		}
+
+		return $this->new_classnames;
 	}
 
 	private function find_attribute( $name ) {
@@ -367,7 +382,7 @@ class WP_HTML_Updater {
 		try {
 			$name_result = $this->match( $regexp );
 		} catch ( \Exception $e ) {
-			$this->finishParsing();
+			$this->finish_parsing();
 
 			return false;
 		}
@@ -435,7 +450,7 @@ class WP_HTML_Updater {
 		return $matches;
 	}
 
-	protected function finishParsing() {
+	protected function finish_parsing() {
 		$this->caret = strlen( $this->html );
 	}
 

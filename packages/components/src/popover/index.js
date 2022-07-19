@@ -238,7 +238,8 @@ const Popover = (
 		placement: computedPlacement,
 		middlewareData: { arrow: arrowData = {} },
 	} = useFloating( { placement: normalizedPlacementProp, middleware } );
-	const staticSide = {
+
+	const arrowStaticSide = {
 		top: 'bottom',
 		right: 'left',
 		bottom: 'top',
@@ -414,7 +415,7 @@ const Popover = (
 								: arrowData.y,
 						right: undefined,
 						bottom: undefined,
-						[ staticSide ]: '-4px',
+						[ arrowStaticSide ]: '-4px',
 					} }
 				/>
 			) }

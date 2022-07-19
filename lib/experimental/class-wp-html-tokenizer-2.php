@@ -151,14 +151,6 @@ class WP_HTML_Updater {
 		return $this->new_string;
 	}
 
-	protected function advanceCaret( $length ) {
-		$this->caret += $length;
-	}
-
-	protected function setCaret( $position ) {
-		$this->caret = $position;
-	}
-
 	public function find_next_tag( $name_spec, $class_name_spec = null, $nth_match = 0 ) {
 		$matched = - 1;
 		while ( true ) {
@@ -206,14 +198,12 @@ class WP_HTML_Updater {
 				'~<!--(?>.*?-->)|<!\[CDATA\[(?>.*?>)|<\?(?>.*?)>|<(?P<TAG>[a-z][^\x{09}\x{0a}\x{0c}\x{0d} \/>]*)~mui'
 			);
 		} catch ( Exception $e ) {
-			$this->setCaret( strlen( $this->html ) );
+			$this->finishParsing();
 
 			return;
 		}
 
-		$full_match = $result[0][0];
-
-		$this->advanceCaret( strlen( $full_match ) );
+		$this->moveCaretAfter( $result[0] );
 		if ( ! isset( $result['TAG'] ) ) {
 			return $this->consume_next_tag();
 		}
@@ -377,14 +367,14 @@ class WP_HTML_Updater {
 		try {
 			$name_result = $this->match( $regexp );
 		} catch ( \Exception $e ) {
-			$this->setCaret( strlen( $this->html ) );
+			$this->finishParsing();
 
 			return false;
 		}
 
 		// No attribute, just tag closer.
 		if ( ! empty( $name_result['CLOSER'][0] ) ) {
-			$this->setCaret( $name_result['CLOSER'][1] );
+			$this->moveCaretBefore( $name_result['CLOSER'] );
 
 			return false;
 		}
@@ -399,7 +389,7 @@ class WP_HTML_Updater {
 			// The name is *not* followed by a value – it must be a flag attribute.
 
 			// Move the caret after the attribute name.
-			$this->setCaret( $name_result['NAME'][1] + strlen( $name_result['NAME'][0] ) );
+			$this->moveCaretAfter( $name_result['NAME'] );
 
 			$this->parsed_attributes[ $attribute_name ] = new WP_Attribute_Match(
 				$attribute_name,
@@ -411,12 +401,12 @@ class WP_HTML_Updater {
 			// The name *is* followed by a value – let's consume it.
 
 			// Consume the value.
-			$this->setCaret( $name_result['FIRST_VALUE_CHAR'][1] );
+			$this->moveCaretBefore( $name_result['FIRST_VALUE_CHAR'] );
 			$value_result = $this->match(
 				"~[\x{09}\x{0a}\x{0c}\x{0d} ]*(?:(?P<QUOTE>['\"])(?P<VALUE>.*?)\k<QUOTE>|(?P<VALUE>[^=\/>\x{09}\x{0a}\x{0c}\x{0d} ]*))~miuJ"
 			);
 
-			$this->advanceCaret( strlen( $value_result[0][0] ) );
+			$this->moveCaretAfter( $value_result[0] );
 			$this->parsed_attributes[ $attribute_name ] = new WP_Attribute_Match(
 				$attribute_name,
 				$value_result['VALUE'][0],
@@ -445,6 +435,17 @@ class WP_HTML_Updater {
 		return $matches;
 	}
 
+	protected function finishParsing() {
+		$this->caret = strlen( $this->html );
+	}
+
+	protected function moveCaretBefore( $match ) {
+		$this->caret = $match[1];
+	}
+
+	protected function moveCaretAfter( $match ) {
+		$this->caret = $match[1] + strlen( $match[0] );
+	}
 
 }
 
@@ -470,7 +471,7 @@ $updater->find_next_tag( 'div' )
         ->set_attribute( 'attr_2', "well well well" )
         ->add_class( 'prego' )
         ->set_attribute( 'attr9', "hey ha" )
-        ->find_next_tag( 'img', null, 2 )
+        ->find_next_tag( 'img', null, 0 )
         ->add_class( 'boat2' );
 //var_dump( $updater->diffs );
 var_dump( $updater . '' );

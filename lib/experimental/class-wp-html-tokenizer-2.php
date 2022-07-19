@@ -92,6 +92,9 @@ class WP_Matcher_Diff {
 
 }
 
+class WP_HTML_No_Match_Exception extends \Exception {
+}
+
 class WP_HTML_Updater {
 
 	private $html;
@@ -117,7 +120,7 @@ class WP_HTML_Updater {
 	/**
 	 * @var array
 	 */
-	private $modified_attributes;
+	private $touched_attr_names;
 	/**
 	 * @var false
 	 */
@@ -154,27 +157,24 @@ class WP_HTML_Updater {
 	public function find_next_tag( $name_spec, $class_name_spec = null, $nth_match = 0 ) {
 		$this->finish_processing_current_tag();
 		$matched = - 1;
-		while ( true ) {
-			$tag = $this->consume_next_tag();
-			if ( ! $tag ) {
-				break;
-			}
-			if ( ! $this->tag_matches( $tag, $name_spec, $class_name_spec ) ) {
+		try {
+			while ( true ) {
+				$tag = $this->consume_next_tag();
+				if ( $this->tag_matches( $tag, $name_spec, $class_name_spec ) ) {
+					if ( ++ $matched === $nth_match ) {
+						break;
+					}
+				}
 				$this->skip_all_attributes();
-				continue;
 			}
-			if ( ++ $matched === $nth_match ) {
-				break;
-			}
+		} catch ( WP_HTML_No_Match_Exception $e ) {
+			$this->finish_parsing();
 		}
 
 		return $this;
 	}
 
 	private function tag_matches( $tag, $name_spec, $class_name_spec ) {
-		if ( ! $tag ) {
-			return false;
-		}
 		if ( $name_spec && ! self::equals( $tag, $name_spec ) ) {
 			return false;
 		}
@@ -206,7 +206,7 @@ class WP_HTML_Updater {
 		$this->current_tag                = null;
 		$this->current_tag_name_end_index = null;
 		$this->parsed_attributes          = array();
-		$this->modified_attributes        = array();
+		$this->touched_attr_names         = array();
 		$this->new_classnames             = null;
 		$this->classnames_modified        = false;
 	}
@@ -281,11 +281,11 @@ class WP_HTML_Updater {
 	}
 
 	private function addDiff( $attribute_name, $diff ) {
-		if ( in_array( $attribute_name, $this->modified_attributes, true ) ) {
+		if ( in_array( $attribute_name, $this->touched_attr_names, true ) ) {
 			throw new Exception( 'nonono' );
 		}
-		$this->modified_attributes[] = $attribute_name;
-		$this->diffs[]               = $diff;
+		$this->touched_attr_names[] = $attribute_name;
+		$this->diffs[]              = $diff;
 	}
 
 	private function get_classes() {
@@ -322,27 +322,22 @@ class WP_HTML_Updater {
 	}
 
 	private function consume_next_tag() {
-		$result = $this->match(
+		$matches = $this->match(
 			'~<!--(?>.*?-->)|<!\[CDATA\[(?>.*?>)|<\?(?>.*?)>|<(?P<TAG>[a-z][^\x{09}\x{0a}\x{0c}\x{0d} \/>]*)~mui'
 		);
-		if ( ! $result ) {
-			$this->finish_parsing();
 
-			return false;
-		}
-
-		$this->moveCaretAfter( $result[0] );
-		if ( ! isset( $result['TAG'] ) ) {
+		$this->moveCaretAfter( $matches[0] );
+		if ( empty( $matches['TAG'] ) ) {
 			return $this->consume_next_tag();
 		}
-		$this->current_tag                = $result['TAG'][0];
-		$this->current_tag_name_end_index = $result[0][1] + strlen( $result['TAG'][0] ) + 1;
+		$this->current_tag                = $matches['TAG'][0];
+		$this->current_tag_name_end_index = $matches[0][1] + strlen( $matches['TAG'][0] ) + 1;
 
 		return $this->current_tag;
 	}
 
 	private function consume_next_attribute() {
-		$regexp      = '~
+		$regexp     = '~
 			[\x{09}\x{0a}\x{0c}\x{0d} ]+ # Preceeding whitespace
 			(?:
 				# Either a tag end, or an attribute:
@@ -367,76 +362,49 @@ class WP_HTML_Updater {
 				)?
 			)
 			~miux';
-		$name_result = $this->match( $regexp );
-		if ( ! $name_result ) {
-			$this->finish_parsing();
-
-			return false;
-		}
+		$name_match = $this->match( $regexp );
 
 		// No attribute, just tag closer.
-		if ( ! empty( $name_result['CLOSER'][0] ) ) {
+		if ( ! empty( $name_match['CLOSER'][0] ) ) {
 			return false;
 		}
 
-		$value_specified = ! empty( $name_result['FIRST_VALUE_CHAR'][0] );
+		$attribute_name  = $name_match['NAME'][0];
+		$attribute_start = $this->indexBefore( $name_match['NAME'] );
 
-		$match = $value_specified
-			? $this->consume_value_attribute( $name_result )
-			: $this->consume_flag_attribute( $name_result );
-
-		if ( ! $match ) {
-			$this->finish_parsing();
-
-			return false;
+		$value_specified = ! empty( $name_match['FIRST_VALUE_CHAR'][0] );
+		if ( $value_specified ) {
+			$this->moveCaretBefore( $name_match['FIRST_VALUE_CHAR'] );
+			$value_match     = $this->match(
+				"~[\x{09}\x{0a}\x{0c}\x{0d} ]*(?:(?P<QUOTE>['\"])(?P<VALUE>.*?)\k<QUOTE>|(?P<VALUE>[^=\/>\x{09}\x{0a}\x{0c}\x{0d} ]*))~miuJ"
+			);
+			$attribute_value = $value_match['VALUE'][0];
+			$attribute_end   = $this->indexAfter( $value_match[0] );
+		} else {
+			$attribute_value = true;
+			$attribute_end   = $this->indexAfter( $name_match['NAME'] );
 		}
 
-		$this->parsed_attributes[ $match->getName() ] = $match;
+		$attr        = new WP_Attribute_Match( $attribute_name, $attribute_value, $attribute_start, $attribute_end );
+		$this->caret = $attribute_end;
 
-		return $match;
-	}
+		$this->parsed_attributes[ $attribute_name ] = $attr;
 
-	private function consume_value_attribute( $name_match ) {
-		$this->moveCaretBefore( $name_match['FIRST_VALUE_CHAR'] );
-		$value_result = $this->match(
-			"~[\x{09}\x{0a}\x{0c}\x{0d} ]*(?:(?P<QUOTE>['\"])(?P<VALUE>.*?)\k<QUOTE>|(?P<VALUE>[^=\/>\x{09}\x{0a}\x{0c}\x{0d} ]*))~miuJ"
-		);
-		if ( empty( $value_result['VALUE'][0] ) ) {
-			$this->finish_parsing();
-
-			return false;
-		}
-
-		$this->moveCaretAfter( $value_result[0] );
-
-		return new WP_Attribute_Match(
-			$name_match['NAME'][0],
-			$value_result['VALUE'][0],
-			$this->indexBefore( $name_match['NAME'] ),
-			$this->indexAfter( $value_result[0] )
-		);
-	}
-
-	private function consume_flag_attribute( $name_match ) {
-		$this->moveCaretAfter( $name_match['NAME'] );
-
-		return new WP_Attribute_Match(
-			$name_match['NAME'][0],
-			true,
-			$this->indexBefore( $name_match['NAME'] ),
-			$this->indexAfter( $name_match['NAME'] )
-		);
+		return $attr;
 	}
 
 	protected function match( $regexp ) {
 		$matches = null;
-		preg_match(
+		$result  = preg_match(
 			$regexp,
 			$this->html,
 			$matches,
 			PREG_OFFSET_CAPTURE,
 			$this->caret
 		);
+		if ( 1 !== $result ) {
+			throw new WP_HTML_No_Match_Exception();
+		}
 
 		return $matches;
 	}

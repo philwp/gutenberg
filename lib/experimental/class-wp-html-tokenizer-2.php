@@ -250,13 +250,11 @@ class WP_HTML_Updater {
 		return $this->update_attribute_if_exists( 'class', implode( ' ', $new_class_names ) );
 	}
 
-	public function set_attribute( $name, $value_or_callback ) {
+	public function set_attribute( $name, $value ) {
 		$attr = $this->find_attribute( $name );
 		if ( $attr ) {
-			return $this->update_attribute_if_exists( $name, $value_or_callback );
+			return $this->update_attribute_if_exists( $name, $value );
 		} else {
-			$value = is_callable( $value_or_callback ) ? $value_or_callback( null ) : $value_or_callback;
-
 			return $this->create_attribute( $name, $value );
 		}
 	}
@@ -276,12 +274,11 @@ class WP_HTML_Updater {
 		return $this;
 	}
 
-	public function update_attribute_if_exists( $name, $value_or_callback ) {
+	public function update_attribute_if_exists( $name, $new_value ) {
 		$attr = $this->find_attribute( $name );
 		if ( $attr ) {
 			$from_index        = $attr->getStartIndex();
 			$to_index          = $attr->getEndIndex();
-			$new_value         = is_callable( $value_or_callback ) ? $value_or_callback( $attr->getValue() ) : $value_or_callback;
 			$escaped_new_value = $new_value; //esc_attr( $new_value );
 			$substitution      = "{$name}=\"{$escaped_new_value}\"";
 			$this->mark_attribute_as_updated( $name );
@@ -470,13 +467,9 @@ function dump_attrs( $attrs ) {
 $updater = new WP_HTML_Updater( $html );
 $updater->find_next_tag( 'div' )
         ->remove_attribute( 'attr4' )
-        ->set_attribute( 'attr_2', function ( $old_value ) {
-	        return "well well well";
-        } )
+        ->set_attribute( 'attr_2', "well well well" )
         ->add_class( 'prego' )
-        ->set_attribute( 'attr9', function () {
-	        return "hey ha";
-        } )
+        ->set_attribute( 'attr9', "hey ha" )
         ->find_next_tag( 'img', null, 2 )
         ->add_class( 'boat2' );
 //var_dump( $updater->diffs );

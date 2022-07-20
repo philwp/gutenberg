@@ -20,7 +20,7 @@ class WP_HTML_Updater {
 	 */
 	private $current_tag_attributes = array();
 	/**
-	 * @var WP_HTML_Updater_ClassNameBag
+	 * @var WP_HTML_Updater_Classnames_Set
 	 */
 	private $current_tag_class_names;
 	/**
@@ -264,7 +264,7 @@ class WP_HTML_Updater {
 		if ( $this->current_tag_class_names === null ) {
 			$class_attr                    = $this->find_attribute( 'class' );
 			$class_value                   = $class_attr ? $class_attr->get_value() : '';
-			$this->current_tag_class_names = new WP_HTML_Updater_ClassNameBag( $class_value );
+			$this->current_tag_class_names = new WP_HTML_Updater_Classnames_Set( $class_value );
 		}
 
 		return $this->current_tag_class_names;
@@ -424,7 +424,7 @@ class WP_HTML_No_Match extends \Exception {
 class WP_HTML_Attribute_Already_Modified extends \Exception {
 }
 
-class WP_HTML_Updater_ClassNameBag {
+class WP_HTML_Updater_Classnames_Set {
 	private $class_names = array();
 	private $initial_class_names;
 

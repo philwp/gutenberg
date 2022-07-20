@@ -6,35 +6,38 @@ class WP_HTML_Updater {
 	/**
 	 * @var int
 	 */
-	private $caret;
+	private $parsed_characters = 0;
 	/**
-	 * @var null
+	 * @var string|null
 	 */
 	private $current_tag;
+	/**
+	 * @var number
+	 */
 	private $current_tag_name_ends_at;
 	/**
 	 * @var array
 	 */
-	private $current_tag_attributes;
+	private $current_tag_attributes = array();
+	/**
+	 * @var WP_HTML_Updater_ClassNameBag
+	 */
 	private $current_tag_class_names;
 	/**
 	 * @var array
 	 */
-	private $touched_attr_names;
+	private $touched_attr_names = array();
 	/**
 	 * @var array
 	 */
-	public $diffs;
+	public $diffs = array();
 	/**
-	 * @var false
+	 * @var null|string
 	 */
 	private $updated_html;
 
 	public function __construct( $html ) {
-		$this->html         = $html;
-		$this->diffs        = array();
-		$this->caret        = 0;
-		$this->updated_html = false;
+		$this->html = $html;
 	}
 
 	public function find_next_tag( $tag_name, $class_name = null, $match_index = 0 ) {
@@ -46,8 +49,8 @@ class WP_HTML_Updater {
 					do {
 						$attr = $this->consume_next_attribute();
 					} while ( $attr );
+					$this->after_tag();
 				}
-				$this->reset_current_tag_state();
 
 				// Match the next tag.
 				do {
@@ -73,7 +76,7 @@ class WP_HTML_Updater {
 		return $this;
 	}
 
-	private function reset_current_tag_state() {
+	private function after_tag() {
 		if ( $this->current_tag && $this->get_class_names_bag()->is_modified() ) {
 			if ( $this->get_class_names_bag()->count() ) {
 				$this->set_attribute( 'class', $this->current_tag_class_names . '' );
@@ -155,8 +158,8 @@ class WP_HTML_Updater {
 			$attribute_end   = $this->index_after( $name_match['NAME'] );
 		}
 
-		$this->caret = $attribute_end;
-		$attr        = new WP_HTML_Attribute_Match( $attribute_name, $attribute_value, $attribute_start, $attribute_end );
+		$this->parsed_characters = $attribute_end;
+		$attr                    = new WP_HTML_Attribute_Match( $attribute_name, $attribute_value, $attribute_start, $attribute_end );
 
 		$this->current_tag_attributes[ $attribute_name ] = $attr;
 
@@ -274,7 +277,7 @@ class WP_HTML_Updater {
 			$this->html,
 			$matches,
 			PREG_OFFSET_CAPTURE,
-			$this->caret
+			$this->parsed_characters
 		);
 		if ( 1 !== $result ) {
 			throw new WP_HTML_No_Match();
@@ -284,16 +287,16 @@ class WP_HTML_Updater {
 	}
 
 	private function finish_parsing() {
-		$this->reset_current_tag_state();
-		$this->caret = strlen( $this->html );
+		$this->after_tag();
+		$this->parsed_characters = strlen( $this->html );
 	}
 
 	private function move_caret_before( $match ) {
-		$this->caret = $this->index_before( $match );
+		$this->parsed_characters = $this->index_before( $match );
 	}
 
 	private function move_caret_after( $match ) {
-		$this->caret = $this->index_after( $match );
+		$this->parsed_characters = $this->index_after( $match );
 	}
 
 	private function index_before( $match ) {
@@ -305,8 +308,8 @@ class WP_HTML_Updater {
 	}
 
 	public function __toString() {
-		if ( false === $this->updated_html ) {
-			$this->reset_current_tag_state();
+		if ( null === $this->updated_html ) {
+			$this->after_tag();
 			usort( $this->diffs, function ( $diff1, $diff2 ) {
 				return $diff1->get_from_index() - $diff2->get_from_index();
 			} );
@@ -445,11 +448,12 @@ class WP_HTML_Updater_ClassNameBag {
 
 	public function remove( $classname ) {
 		$key = WP_HTML_Comparator::comparable( $classname );
-		unset($this->class_names[ $key ]);
+		unset( $this->class_names[ $key ] );
 	}
 
 	public function has( $classname ) {
 		$key = WP_HTML_Comparator::comparable( $classname );
+
 		return array_key_exists( $key, $this->class_names );
 	}
 
@@ -477,7 +481,7 @@ class WP_HTML_Comparator {
 $html = <<<HTML
 <div class="merge-message">
 	<div class="select-menu d-inline-block">
-		<div class="BtnGroup position-relative">
+		<div class="BtnGroup MixedCaseHTML position-relative">
 			<button type="button" class="merge-box-button btn-group-merge rounded-left-2 btn  BtnGroup-item js-details-target hx_create-pr-button" aria-expanded="false" data-details-container=".js-merge-pr" disabled="">
 			  Merge pull request
 			</button>
@@ -511,10 +515,10 @@ $updater
 	->find_next_tag( 'div', 'BtnGroup' )
 		->remove_class( 'BtnGroup' )
 		->add_class( 'button-group' )
+		->add_class( 'Another-Mixed-Case' )
 	->find_next_tag( 'button', 'btn', 2 )
 		->remove_attribute( 'class' )
 	->find_next_tag( 'this one is missing' )
-		->remove_attribute( 'but we still do not error out!' )
-;
+		->remove_attribute( 'but we still do not error out!' );
 
 var_dump( $updater . '' );

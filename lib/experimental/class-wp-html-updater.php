@@ -57,7 +57,7 @@ class WP_HTML_Updater {
 					$matches = $this->match(
 						'~<!--(?>.*?-->)|<!\[CDATA\[(?>.*?>)|<\?(?>.*?)>|<(?P<TAG_NAME>[a-z][^\x{09}\x{0a}\x{0c}\x{0d} \/>]*)~mui'
 					);
-					$this->move_caret_after( $matches[0] );
+					$this->move_parser_after( $matches[0] );
 				} while ( empty( $matches['TAG_NAME'][0] ) );
 
 				$this->current_tag              = $matches['TAG_NAME'][0];
@@ -112,7 +112,8 @@ class WP_HTML_Updater {
 
 	private function consume_next_attribute() {
 		$regexp     = '~
-			[\x{09}\x{0a}\x{0c}\x{0d} ]* # Preceeding whitespace
+			# Preceeding whitespace:
+			[\x{09}\x{0a}\x{0c}\x{0d} ]*
 			(?:
 				# Either a tag end, or an attribute:
 				(?P<CLOSER>\/?>)
@@ -144,13 +145,23 @@ class WP_HTML_Updater {
 		}
 
 		$attribute_name  = $name_match['NAME'][0];
-		$attribute_start = $this->index_before( $name_match['NAME'] );
+		$attribute_start = $this->index_of( $name_match['NAME'] );
 
 		$value_specified = ! empty( $name_match['FIRST_VALUE_CHAR'][0] );
 		if ( $value_specified ) {
-			$this->move_caret_before( $name_match['FIRST_VALUE_CHAR'] );
+			$this->move_parser_to( $name_match['FIRST_VALUE_CHAR'] );
 			$value_match     = $this->match(
-				"~[\x{09}\x{0a}\x{0c}\x{0d} ]*(?:(?P<QUOTE>['\"])(?P<VALUE>.*?)\k<QUOTE>|(?P<VALUE>[^=\/>\x{09}\x{0a}\x{0c}\x{0d} ]*))~miuJ"
+				"~
+				# Preceeding whitespace
+				[\x{09}\x{0a}\x{0c}\x{0d} ]*
+				(?:
+					# A quoted attribute value
+					(?P<QUOTE>['\"])(?P<VALUE>.*?)\k<QUOTE>
+					|
+					# An unquoted attribute value
+					(?P<VALUE>[^=\/>\x{09}\x{0a}\x{0c}\x{0d} ]*)
+				)
+				~miuJx"
 			);
 			$attribute_value = $value_match['VALUE'][0];
 			$attribute_end   = $this->index_after( $value_match[0] );
@@ -267,15 +278,15 @@ class WP_HTML_Updater {
 		return $matches;
 	}
 
-	private function move_caret_before( $match ) {
-		$this->parsed_characters = $this->index_before( $match );
+	private function move_parser_to( $match ) {
+		$this->parsed_characters = $this->index_of( $match );
 	}
 
-	private function move_caret_after( $match ) {
+	private function move_parser_after( $match ) {
 		$this->parsed_characters = $this->index_after( $match );
 	}
 
-	private function index_before( $match ) {
+	private function index_of( $match ) {
 		return $match[1];
 	}
 
@@ -471,9 +482,10 @@ class WP_HTML_Comparator {
 }
 
 $html = <<<HTML
-<div class="merge-message">
+<div selected class="merge-message" checked>
 	<div class="select-menu d-inline-block">
-		<div class="BtnGroup MixedCaseHTML position-relative">
+		<div checked class="BtnGroup MixedCaseHTML position-relative" />
+		<div checked class="BtnGroup MixedCaseHTML position-relative">
 			<button type="button" class="merge-box-button btn-group-merge rounded-left-2 btn  BtnGroup-item js-details-target hx_create-pr-button" aria-expanded="false" data-details-container=".js-merge-pr" disabled="">
 			  Merge pull request
 			</button>
@@ -502,15 +514,19 @@ if ( ! function_exists( 'esc_attr' ) ) {
 $updater = new WP_HTML_Updater( $html );
 $updater
 	->find_next_tag( 'div' )
-	->set_attribute( 'data-details', '{ "key": "value" }' )
-	->add_class( 'is-processed' )
+		->set_attribute( 'data-details', '{ "key": "value" }' )
+		->add_class( 'is-processed' )
 	->find_next_tag( 'div', 'BtnGroup' )
-	->remove_class( 'BtnGroup' )
-	->add_class( 'button-group' )
-	->add_class( 'Another-Mixed-Case' )
+		->remove_class( 'BtnGroup' )
+		->add_class( 'button-group' )
+		->add_class( 'Another-Mixed-Case' )
+	->find_next_tag( 'div', 'BtnGroup' )
+		->remove_class( 'BtnGroup' )
+		->add_class( 'button-group' )
+		->add_class( 'Another-Mixed-Case' )
 	->find_next_tag( 'button', 'btn', 2 )
-	->remove_attribute( 'class' )
+		->remove_attribute( 'class' )
 	->find_next_tag( 'this one is missing' )
-	->remove_attribute( 'but we still do not error out!' );
+		->remove_attribute( 'but we still do not error out!' );
 
 var_dump( $updater . '' );

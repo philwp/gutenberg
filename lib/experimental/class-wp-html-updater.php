@@ -152,7 +152,7 @@ class WP_HTML_Updater {
 	private function after_tag() {
 		if ( $this->current_tag && $this->current_class_names_set()->is_modified() ) {
 			if ( $this->current_class_names_set()->count() ) {
-				$this->set_attribute( 'class', $this->current_tag_class_names . '' );
+				$this->set_attribute( 'class', $this->current_class_names_set() . '' );
 			} else {
 				$this->remove_attribute( 'class' );
 			}
@@ -189,22 +189,21 @@ class WP_HTML_Updater {
 
 			$attr = $this->find_current_tag_attribute( $name );
 			if ( $attr ) {
-				// Update existing attribute.
-				$this->add_diff(
-					$name,
-					WP_HTML_Diff::from_attribute_match( $attr, $updated_attribute )
+				// Update an existing attribute.
+				$diff = new WP_HTML_Diff(
+					$attr->get_start_index(),
+					$attr->get_end_index(),
+					$updated_attribute
 				);
 			} else {
-				// Create a new attribute at the tag name end.
-				$this->add_diff(
-					$name,
-					new WP_HTML_Diff(
-						$this->current_tag_name_ends_at,
-						$this->current_tag_name_ends_at,
-						" {$updated_attribute}"
-					)
+				// Create a new attribute at the tag's name end.
+				$diff = new WP_HTML_Diff(
+					$this->current_tag_name_ends_at,
+					$this->current_tag_name_ends_at,
+					" {$updated_attribute}"
 				);
 			}
+			$this->add_diff( $name, $diff );
 		}
 
 		return $this;
@@ -382,14 +381,6 @@ class WP_HTML_Diff {
 	private $from_index;
 	private $to_index;
 	private $substitution;
-
-	static public function from_attribute_match( WP_HTML_Attribute_Match $attribute, $substitution ) {
-		return new WP_HTML_Diff(
-			$attribute->get_start_index(),
-			$attribute->get_end_index(),
-			$substitution
-		);
-	}
 
 	/**
 	 * @param int $from_index

@@ -213,7 +213,12 @@ class WP_HTML_Updater {
 		if ( $this->current_tag ) {
 			$attr = $this->find_current_tag_attribute( $name );
 			if ( $attr ) {
-				$this->add_diff( $name, WP_HTML_Diff::from_attribute_match( $attr, '' ) );
+				$diff = new WP_HTML_Diff(
+					$attr->get_start_index(),
+					$attr->get_end_index(),
+					''
+				);
+				$this->add_diff( $name, $diff );
 			}
 		}
 

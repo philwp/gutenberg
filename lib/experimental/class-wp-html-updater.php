@@ -247,6 +247,7 @@ class WP_HTML_Updater {
 
 		return $this;
 	}
+
 	private function add_diff( $attribute_name, $diff ) {
 		if ( in_array( $attribute_name, $this->current_tag_touched_attributes_names, true ) ) {
 			throw new WP_HTML_Attribute_Already_Modified( "Only one change per tag attribute is supported and the attribute '{$attribute_name}' was already changed on tag {$this->current_tag}." );

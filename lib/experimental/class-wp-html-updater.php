@@ -187,7 +187,7 @@ class WP_HTML_Updater {
 			$escaped_new_value = esc_attr( $value );
 			$updated_attribute = "{$name}=\"{$escaped_new_value}\"";
 
-			$attr = $this->find_attribute( $name );
+			$attr = $this->find_current_tag_attribute( $name );
 			if ( $attr ) {
 				// Update existing attribute.
 				$this->add_diff(
@@ -212,7 +212,7 @@ class WP_HTML_Updater {
 
 	public function remove_attribute( $name ) {
 		if ( $this->current_tag ) {
-			$attr = $this->find_attribute( $name );
+			$attr = $this->find_current_tag_attribute( $name );
 			if ( $attr ) {
 				$this->add_diff( $name, WP_HTML_Diff::from_attribute_match( $attr, '' ) );
 			}
@@ -221,7 +221,7 @@ class WP_HTML_Updater {
 		return $this;
 	}
 
-	private function find_attribute( $name ) {
+	private function find_current_tag_attribute( $name ) {
 		if ( array_key_exists( $name, $this->current_tag_attributes ) ) {
 			return $this->current_tag_attributes[ $name ];
 		}
@@ -257,7 +257,7 @@ class WP_HTML_Updater {
 
 	private function current_class_names_set() {
 		if ( $this->current_tag_class_names === null ) {
-			$class_attr                    = $this->find_attribute( 'class' );
+			$class_attr                    = $this->find_current_tag_attribute( 'class' );
 			$class_value                   = $class_attr ? $class_attr->get_value() : '';
 			$this->current_tag_class_names = new WP_HTML_Updater_Classnames_Set( $class_value );
 		}

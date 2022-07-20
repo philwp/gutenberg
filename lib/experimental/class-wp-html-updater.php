@@ -30,7 +30,7 @@ class WP_HTML_Updater {
 	/**
 	 * @var array
 	 */
-	public $diffs = array();
+	private $diffs = array();
 	/**
 	 * @var null|string
 	 */
@@ -70,15 +70,16 @@ class WP_HTML_Updater {
 				}
 			}
 		} catch ( WP_HTML_No_Match $e ) {
-			$this->finish_parsing();
+			$this->after_tag();
+			$this->parsed_characters = strlen( $this->html );
 		}
 
 		return $this;
 	}
 
 	private function after_tag() {
-		if ( $this->current_tag && $this->get_class_names_bag()->is_modified() ) {
-			if ( $this->get_class_names_bag()->count() ) {
+		if ( $this->current_tag && $this->current_class_names_set()->is_modified() ) {
+			if ( $this->current_class_names_set()->count() ) {
 				$this->set_attribute( 'class', $this->current_tag_class_names . '' );
 			} else {
 				$this->remove_attribute( 'class' );
@@ -98,7 +99,7 @@ class WP_HTML_Updater {
 			return false;
 		}
 		if ( $class_name ) {
-			$classes = $this->get_class_names_bag();
+			$classes = $this->current_class_names_set();
 			// For debugging:
 			// echo "Class name {$class_name} does not match the current classes: {$classes}\n";
 			if ( ! $classes->has( $class_name ) ) {
@@ -200,14 +201,14 @@ class WP_HTML_Updater {
 		}
 		do {
 			$attr = $this->consume_next_attribute();
-		} while ( $attr && ! WP_HTML_Comparator::equals( $attr->get_name(), $name ) );
+		} while ( $attr && ! $attr->name_equals( $name ) );
 
 		return $attr;
 	}
 
 	public function add_class( $class_name ) {
 		if ( $this->current_tag ) {
-			$this->get_class_names_bag()->add( $class_name );
+			$this->current_class_names_set()->add( $class_name );
 		}
 
 		return $this;
@@ -215,7 +216,7 @@ class WP_HTML_Updater {
 
 	public function remove_class( $class_name ) {
 		if ( $this->current_tag ) {
-			$this->get_class_names_bag()->remove( $class_name );
+			$this->current_class_names_set()->remove( $class_name );
 		}
 
 		return $this;
@@ -240,7 +241,7 @@ class WP_HTML_Updater {
 		$this->diffs[]              = $diff;
 	}
 
-	private function get_class_names_bag() {
+	private function current_class_names_set() {
 		if ( $this->current_tag_class_names === null ) {
 			$class_attr                    = $this->find_attribute( 'class' );
 			$class_value                   = $class_attr ? $class_attr->get_value() : '';
@@ -266,11 +267,6 @@ class WP_HTML_Updater {
 		return $matches;
 	}
 
-	private function finish_parsing() {
-		$this->after_tag();
-		$this->parsed_characters = strlen( $this->html );
-	}
-
 	private function move_caret_before( $match ) {
 		$this->parsed_characters = $this->index_before( $match );
 	}
@@ -289,11 +285,15 @@ class WP_HTML_Updater {
 
 	public function __toString() {
 		if ( null === $this->updated_html ) {
+			// Finish parsing the current tag, if any.
 			$this->after_tag();
+
+			// Sort by index ascending
 			usort( $this->diffs, function ( $diff1, $diff2 ) {
 				return $diff1->get_from_index() - $diff2->get_from_index();
 			} );
 
+			// Apply all the diffs to the HTML.
 			$index = 0;
 			foreach ( $this->diffs as $diff ) {
 				$pieces[] = substr( $this->html, $index, $diff->get_from_index() - $index );
@@ -327,6 +327,10 @@ class WP_HTML_Attribute_Match {
 		$this->value       = $value;
 		$this->start_index = $start_index;
 		$this->end_index   = $end_index;
+	}
+
+	public function name_equals( $compare_name ) {
+		return WP_HTML_Comparator::equals( $this->name, $compare_name );
 	}
 
 	/**

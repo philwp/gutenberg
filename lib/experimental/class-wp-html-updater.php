@@ -167,15 +167,31 @@ class WP_HTML_Updater {
 	}
 
 	public function set_attribute( $name, $value ) {
-		if ( ! $this->current_tag ) {
-			return $this;
+		if ( $this->current_tag ) {
+			$escaped_new_value = esc_attr( $value );
+			$updated_attribute = "{$name}=\"{$escaped_new_value}\"";
+
+			$attr = $this->find_attribute( $name );
+			if ( $attr ) {
+				// Update existing attribute.
+				$this->add_diff(
+					$name,
+					WP_HTML_Diff::from_attribute_match( $attr, $updated_attribute )
+				);
+			} else {
+				// Create a new attribute.
+				$this->add_diff(
+					$name,
+					new WP_HTML_Diff(
+						$this->current_tag_name_ends_at,
+						$this->current_tag_name_ends_at,
+						" {$updated_attribute}"
+					)
+				);
+			}
 		}
-		$attr = $this->find_attribute( $name );
-		if ( $attr ) {
-			return $this->update_attribute_if_exists( $name, $value );
-		} else {
-			return $this->create_attribute( $name, $value );
-		}
+
+		return $this;
 	}
 
 	private function find_attribute( $name ) {
@@ -190,63 +206,27 @@ class WP_HTML_Updater {
 	}
 
 	public function add_class( $class_name ) {
-		if ( ! $this->current_tag ) {
-			return $this;
+		if ( $this->current_tag ) {
+			$this->get_class_names_bag()->add( $class_name );
 		}
-		$this->get_class_names_bag()->add( $class_name );
 
 		return $this;
 	}
 
 	public function remove_class( $class_name ) {
-		if ( ! $this->current_tag ) {
-			return $this;
-		}
-		$this->get_class_names_bag()->remove( $class_name );
-
-		return $this;
-	}
-
-	public function create_attribute( $name, $value ) {
-		if ( ! $this->current_tag ) {
-			return $this;
-		}
-		$from_index        = $this->current_tag_name_ends_at;
-		$to_index          = $this->current_tag_name_ends_at;
-		$escaped_new_value = esc_attr( $value );
-		$substitution      = " {$name}=\"{$escaped_new_value}\"";
-		$this->add_diff( $name, new WP_Matcher_Diff( $from_index, $to_index, $substitution ) );
-
-		return $this;
-	}
-
-	public function update_attribute_if_exists( $name, $value ) {
-		if ( ! $this->current_tag ) {
-			return $this;
-		}
-		$attr = $this->find_attribute( $name );
-		if ( $attr ) {
-			$from_index        = $attr->get_start_index();
-			$to_index          = $attr->get_end_index();
-			$escaped_new_value = esc_attr( $value );
-			$substitution      = "{$name}=\"{$escaped_new_value}\"";
-			$this->add_diff( $name, new WP_Matcher_Diff( $from_index, $to_index, $substitution ) );
+		if ( $this->current_tag ) {
+			$this->get_class_names_bag()->remove( $class_name );
 		}
 
 		return $this;
 	}
 
 	public function remove_attribute( $name ) {
-		if ( ! $this->current_tag ) {
-			return $this;
-		}
-		$attr = $this->find_attribute( $name );
-		if ( $attr ) {
-			$this->add_diff( $name, new WP_Matcher_Diff(
-				$attr->get_start_index(),
-				$attr->get_end_index(),
-				''
-			) );
+		if ( $this->current_tag ) {
+			$attr = $this->find_attribute( $name );
+			if ( $attr ) {
+				$this->add_diff( $name, WP_HTML_Diff::from_attribute_match( $attr, '' ) );
+			}
 		}
 
 		return $this;
@@ -379,15 +359,23 @@ class WP_HTML_Attribute_Match {
 
 }
 
-class WP_Matcher_Diff {
+class WP_HTML_Diff {
 	private $from_index;
 	private $to_index;
 	private $substitution;
 
+	static public function from_attribute_match( WP_HTML_Attribute_Match $attribute, $substitution ) {
+		return new WP_HTML_Diff(
+			$attribute->get_start_index(),
+			$attribute->get_end_index(),
+			$substitution
+		);
+	}
+
 	/**
-	 * @param $from_index
-	 * @param $to_index
-	 * @param $substitution
+	 * @param int $from_index
+	 * @param int $to_index
+	 * @param string $substitution
 	 */
 	public function __construct( $from_index, $to_index, $substitution ) {
 		$this->from_index   = $from_index;
@@ -510,15 +498,15 @@ if ( ! function_exists( 'esc_attr' ) ) {
 $updater = new WP_HTML_Updater( $html );
 $updater
 	->find_next_tag( 'div' )
-		->set_attribute( 'data-details', '{ "key": "value" }' )
-		->add_class( 'is-processed' )
+	->set_attribute( 'data-details', '{ "key": "value" }' )
+	->add_class( 'is-processed' )
 	->find_next_tag( 'div', 'BtnGroup' )
-		->remove_class( 'BtnGroup' )
-		->add_class( 'button-group' )
-		->add_class( 'Another-Mixed-Case' )
+	->remove_class( 'BtnGroup' )
+	->add_class( 'button-group' )
+	->add_class( 'Another-Mixed-Case' )
 	->find_next_tag( 'button', 'btn', 2 )
-		->remove_attribute( 'class' )
+	->remove_attribute( 'class' )
 	->find_next_tag( 'this one is missing' )
-		->remove_attribute( 'but we still do not error out!' );
+	->remove_attribute( 'but we still do not error out!' );
 
 var_dump( $updater . '' );

@@ -533,3 +533,27 @@ $updater
 		->remove_attribute( 'but we still do not error out!' );
 
 var_dump( $updater . '' );
+
+/*
+ * Output:
+<div data-details="{ &quot;key&quot;: &quot;value&quot; }" selected class="merge-message is-processed" checked>
+        <div class="select-menu d-inline-block">
+                <div checked class="MixedCaseHTML position-relative button-group Another-Mixed-Case" />
+                <div checked class="MixedCaseHTML position-relative button-group Another-Mixed-Case">
+                        <button type="button" class="merge-box-button btn-group-merge rounded-left-2 btn  BtnGroup-item js-details-target hx_create-pr-button" aria-expanded="false" data-details-container=".js-merge-pr" disabled="">
+                          Merge pull request
+                        </button>
+
+                        <button type="button" class="merge-box-button btn-group-squash rounded-left-2 btn  BtnGroup-item js-details-target hx_create-pr-button" aria-expanded="false" data-details-container=".js-merge-pr" disabled="">
+                          Squash and merge
+                        </button>
+
+                        <button type="button"  aria-expanded="false" data-details-container=".js-merge-pr" disabled="">
+                          Rebase and merge
+                        </button>
+
+                        <button aria-label="Select merge method" disabled="disabled" type="button" data-view-component="true" class="select-menu-button btn BtnGroup-item"></button>
+                </div>
+        </div>
+</div>
+ */

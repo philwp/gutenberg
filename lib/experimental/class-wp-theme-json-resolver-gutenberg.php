@@ -51,6 +51,10 @@ class WP_Theme_JSON_Resolver_Gutenberg extends WP_Theme_JSON_Resolver_6_1 {
 				$parent_theme->merge( static::$theme );
 				static::$theme = $parent_theme;
 			}
+
+			// TODO possibly merge in plugin data here (depending on all the places this is used). If
+			// plugin data is merged here then we don't need to do plugin data in the `::get_merged_data()` function
+			// static::$theme = static::merge_plugin_theme_json();
 		}
 
 		if ( ! $settings['with_supports'] ) {
@@ -179,6 +183,10 @@ class WP_Theme_JSON_Resolver_Gutenberg extends WP_Theme_JSON_Resolver_6_1 {
 		$result->merge( static::get_core_data() );
 		$result->merge( static::get_block_data() );
 		$result->merge( static::get_theme_data() );
+
+		//TODO merge in plugin data (IF it's not already handled in ::get_theme_data())
+		// see the comment block there.
+
 		if ( 'custom' === $origin ) {
 			$result->merge( static::get_user_data() );
 		}

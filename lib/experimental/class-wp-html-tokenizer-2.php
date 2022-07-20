@@ -174,7 +174,7 @@ class WP_HTML_Updater {
 		$this->reset_current_tag_state();
 	}
 
-	protected function reset_current_tag_state() {
+	private function reset_current_tag_state() {
 		$this->current_tag              = null;
 		$this->current_tag_name_ends_at = null;
 		$this->current_tag_attributes   = array();
@@ -216,7 +216,7 @@ class WP_HTML_Updater {
 		return $this->current_tag;
 	}
 
-	protected function finish_processing_current_tag() {
+	private function finish_processing_current_tag() {
 		if ( ! $this->current_tag ) {
 			return;
 		}
@@ -412,7 +412,7 @@ class WP_HTML_Updater {
 		return $this->current_tag_class_names;
 	}
 
-	protected function match( $regexp ) {
+	private function match( $regexp ) {
 		$matches = null;
 		$result  = preg_match(
 			$regexp,
@@ -436,24 +436,24 @@ class WP_HTML_Updater {
 		return trim( strtolower( $value ) );
 	}
 
-	protected function finish_parsing() {
+	private function finish_parsing() {
 		$this->reset_current_tag_state();
 		$this->caret = strlen( $this->html );
 	}
 
-	protected function move_caret_before( $match ) {
+	private function move_caret_before( $match ) {
 		$this->caret = $this->index_before( $match );
 	}
 
-	protected function move_caret_after( $match ) {
+	private function move_caret_after( $match ) {
 		$this->caret = $this->index_after( $match );
 	}
 
-	protected function index_before( $match ) {
+	private function index_before( $match ) {
 		return $match[1];
 	}
 
-	protected function index_after( $match ) {
+	private function index_after( $match ) {
 		return $match[1] + strlen( $match[0] );
 	}
 
@@ -497,14 +497,14 @@ function dump_attrs( $attrs ) {
 
 $updater = new WP_HTML_Updater( $html );
 $updater->find_next_tag( 'div' )
-        ->remove_attribute( 'attr4' )
-        ->set_attribute( 'attr_2', "well well well" )
-        ->add_class( 'prego' )
-        ->set_attribute( 'attr9', "hey ha" )
+	        ->remove_attribute( 'attr4' )
+	        ->set_attribute( 'attr_2', "well well well" )
+	        ->add_class( 'prego' )
+	        ->set_attribute( 'attr9', "hey ha" )
         ->find_next_tag( 'img', null, 1 )
-        ->add_class( 'boat2' )
+            ->add_class( 'boat2' )
         ->find_next_tag( 'spa2n' )
-        ->add_class( 'boat2' );
+            ->add_class( 'boat2' );
 //var_dump( $updater->diffs );
 var_dump( $updater . '' );
 //dump_attrs( $updater->parsed_attributes );

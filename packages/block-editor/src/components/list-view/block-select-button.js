@@ -10,10 +10,12 @@ import {
 	Button,
 	__experimentalHStack as HStack,
 	__experimentalTruncate as Truncate,
+	__experimentalInputControl as InputControl,
 } from '@wordpress/components';
-import { forwardRef } from '@wordpress/element';
+import { forwardRef, useRef, useState } from '@wordpress/element';
 import { Icon, lock } from '@wordpress/icons';
 import { SPACE, ENTER } from '@wordpress/keycodes';
+import { useDispatch } from '@wordpress/data';
 
 /**
  * Internal dependencies
@@ -23,6 +25,7 @@ import useBlockDisplayInformation from '../use-block-display-information';
 import useBlockDisplayTitle from '../block-title/use-block-display-title';
 import ListViewExpander from './expander';
 import { useBlockLock } from '../block-lock';
+import { store as blockEditorStore } from '../../store';
 
 function ListViewBlockSelectButton(
 	{
@@ -38,12 +41,17 @@ function ListViewBlockSelectButton(
 	},
 	ref
 ) {
+	const clickHandlerTimer = useRef();
+	const [ labelEditingMode, setLabelEditingMode ] = useState( false );
+
 	const blockInformation = useBlockDisplayInformation( clientId );
 	const blockTitle = useBlockDisplayTitle( {
 		clientId,
 		context: 'list-view',
 	} );
+	const [ inputValue, setInputValue ] = useState( blockTitle );
 	const { isLocked } = useBlockLock( clientId );
+	const { updateBlockAttributes } = useDispatch( blockEditorStore );
 
 	// The `href` attribute triggers the browser's native HTML drag operations.
 	// When the link is dragged, the element's outerHTML is set in DataTransfer object as text/html.
@@ -55,8 +63,18 @@ function ListViewBlockSelectButton(
 	};
 
 	function onKeyDownHandler( event ) {
+		if ( labelEditingMode && event.keyCode === ENTER ) {
+			updateBlockAttributes( clientId, {
+				alias: inputValue,
+			} );
+			setLabelEditingMode( false );
+			return;
+		}
+
 		if ( event.keyCode === ENTER || event.keyCode === SPACE ) {
-			onClick( event );
+			if ( ! labelEditingMode ) {
+				onClick( event );
+			}
 		}
 	}
 
@@ -67,7 +85,22 @@ function ListViewBlockSelectButton(
 					'block-editor-list-view-block-select-button',
 					className
 				) }
-				onClick={ onClick }
+				onClick={ ( event ) => {
+					clearTimeout( clickHandlerTimer.current );
+
+					if ( labelEditingMode ) {
+						event.preventDefault();
+						return;
+					}
+
+					if ( event.detail === 1 ) {
+						clickHandlerTimer.current = setTimeout( () => {
+							onClick( event );
+						}, 200 );
+					} else if ( event.detail === 2 ) {
+						setLabelEditingMode( true );
+					}
+				} }
 				onKeyDown={ onKeyDownHandler }
 				ref={ ref }
 				tabIndex={ tabIndex }
@@ -87,7 +120,18 @@ function ListViewBlockSelectButton(
 					spacing={ 1 }
 				>
 					<span className="block-editor-list-view-block-select-button__title">
-						<Truncate ellipsizeMode="auto">{ blockTitle }</Truncate>
+						{ labelEditingMode ? (
+							<InputControl
+								value={ inputValue }
+								onChange={ ( nextValue ) => {
+									setInputValue( nextValue ?? '' );
+								} }
+							/>
+						) : (
+							<Truncate ellipsizeMode="auto">
+								{ blockTitle }
+							</Truncate>
+						) }
 					</span>
 					{ blockInformation?.anchor && (
 						<span className="block-editor-list-view-block-select-button__anchor">

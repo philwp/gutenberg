@@ -15,6 +15,9 @@
 		"templateLock": {
 			"type": [ "string", "boolean" ],
 			"enum": [ "all", "insert", false ]
+		},
+		"alias": {
+			"type": "string"
 		}
 	},
 	"supports": {

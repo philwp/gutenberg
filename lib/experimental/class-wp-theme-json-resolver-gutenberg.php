@@ -16,6 +16,15 @@
  * @access private
  */
 class WP_Theme_JSON_Resolver_Gutenberg extends WP_Theme_JSON_Resolver_6_1 {
+
+	/**
+	 * Container for data coming from plugins
+	 *
+	 * @since 6.1.0
+	 * @var WP_Theme_JSON
+	 */
+	protected static $plugins = null;
+
 	/**
 	 * Returns the theme's data.
 	 *
@@ -51,10 +60,6 @@ class WP_Theme_JSON_Resolver_Gutenberg extends WP_Theme_JSON_Resolver_6_1 {
 				$parent_theme->merge( static::$theme );
 				static::$theme = $parent_theme;
 			}
-
-			// TODO possibly merge in plugin data here (depending on all the places this is used). If
-			// plugin data is merged here then we don't need to do plugin data in the `::get_merged_data()` function
-			// static::$theme = static::merge_plugin_theme_json();
 		}
 
 		if ( ! $settings['with_supports'] ) {
@@ -131,6 +136,14 @@ class WP_Theme_JSON_Resolver_Gutenberg extends WP_Theme_JSON_Resolver_6_1 {
 		return new WP_Theme_JSON_Gutenberg( $config, 'core' );
 	}
 
+	public static function get_plugin_theme_data() {
+		if ( null === static::$plugins ) {
+			$plugin_registry = WP_Plugin_Theme_Data_Registry::get_instance();
+			static::$plugins = $plugin_registry->get_theme_data();
+		}
+		return static::$plugins;
+	}
+
 	/**
 	 * When given an array, this will remove any keys with the name `//`.
 	 *
@@ -183,9 +196,8 @@ class WP_Theme_JSON_Resolver_Gutenberg extends WP_Theme_JSON_Resolver_6_1 {
 		$result->merge( static::get_core_data() );
 		$result->merge( static::get_block_data() );
 		$result->merge( static::get_theme_data() );
-
-		//TODO merge in plugin data (IF it's not already handled in ::get_theme_data())
-		// see the comment block there.
+		// TODO merge in plugin data.
+		// $result->merge( static::get_plugin_theme_data() );.
 
 		if ( 'custom' === $origin ) {
 			$result->merge( static::get_user_data() );

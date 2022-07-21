@@ -88,8 +88,7 @@ export const settings = {
 	__experimentalLabel( attributes, { context } ) {
 		const { alias } = attributes;
 
-		// In the list view, use the block's content as the label.
-		// If the content is empty, fall back to the default label.
+		// In the list view, use the block's aliasattribute as the label.
 		if ( context === 'list-view' && alias ) {
 			return alias;
 		}

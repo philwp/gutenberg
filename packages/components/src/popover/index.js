@@ -57,7 +57,7 @@ const SLOT_NAME = 'Popover';
 const slotNameContext = createContext();
 
 // Converts the `Popover`'s legacy "position" prop to the
-// new "placement" prop (used by `gloating-ui`).
+// new "placement" prop (used by `floating-ui`).
 const positionToPlacement = ( position ) => {
 	const [ x, y, z ] = position.split( ' ' );
 
@@ -112,6 +112,22 @@ const placementToAnimationOrigin = ( placement, rtl ) => {
 
 	return animationOrigin;
 };
+
+/**
+ * @param {FloatingUIPlacement} placement
+ * @return {'top' | 'right' | 'bottom' | 'left'} The side
+ */
+export function getSide( placement ) {
+	return placement.split( '-' )[ 0 ];
+}
+
+/**
+ * @param {FloatingUIPlacement} placement
+ * @return {'x' | 'y'} The axis
+ */
+export function getMainAxisFromPlacement( placement ) {
+	return [ 'top', 'bottom' ].includes( getSide( placement ) ) ? 'x' : 'y';
+}
 
 const Popover = (
 	{
@@ -180,7 +196,30 @@ const Popover = (
 		return document;
 	}, [ anchorRef, anchorRect, getAnchorRect ] );
 
+	/**
+	 * Adjusts the position of the popover when the anchor is inside an iframe
+	 * so that the popover aligns correctly with its anchor.
+	 */
+	const iframeOffsetMiddleware = useMemo( () => {
+		const frameElement = ownerDocument?.defaultView?.frameElement;
+
+		if ( ! frameElement || ownerDocument === document ) {
+			return undefined;
+		}
+
+		const { top, left } = frameElement.getBoundingClientRect();
+
+		return offsetMiddleware( ( { placement } ) => {
+			const computedMainAxis = getMainAxisFromPlacement( placement );
+			return {
+				mainAxis: computedMainAxis === 'x' ? -top : -left,
+				crossAxis: computedMainAxis === 'x' ? -left : -top,
+			};
+		} );
+	}, [ ownerDocument ] );
+
 	const middleware = [
+		iframeOffsetMiddleware,
 		offset ? offsetMiddleware( offset ) : undefined,
 		__unstableForcePosition ? undefined : flip(),
 		__unstableForcePosition

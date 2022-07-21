@@ -45,22 +45,6 @@ export default function BlockPopover( {
 		bottom: lastSelectedElement,
 	};
 
-	const anchorOwnerDocument = anchorRef.top.ownerDocument;
-
-	const popoverOffset = useMemo( () => {
-		const frameElement = anchorOwnerDocument?.defaultView?.frameElement;
-
-		if ( ! frameElement || anchorOwnerDocument === document ) {
-			return;
-		}
-
-		const { left, top } = frameElement.getBoundingClientRect();
-		return {
-			mainAxis: -top,
-			crossAxis: -left,
-		};
-	}, [ anchorOwnerDocument ] );
-
 	if ( ! selectedElement || ( bottomClientId && ! lastSelectedElement ) ) {
 		return null;
 	}
@@ -78,7 +62,6 @@ export default function BlockPopover( {
 			__unstableObserveElement={ selectedElement }
 			__unstableForcePosition
 			__unstableShift
-			offset={ popoverOffset }
 			{ ...props }
 			className={ classnames(
 				'block-editor-block-popover',

@@ -40,14 +40,15 @@ export default function BlockPopover( {
 		};
 	}, [ selectedElement, lastSelectedElement, __unstableRefreshSize ] );
 
+	if ( ! selectedElement || ( bottomClientId && ! lastSelectedElement ) ) {
+		return null;
+	}
+
 	const anchorRef = {
 		top: selectedElement,
 		bottom: lastSelectedElement,
 	};
 
-	if ( ! selectedElement || ( bottomClientId && ! lastSelectedElement ) ) {
-		return null;
-	}
 	return (
 		<Popover
 			ref={ popoverScrollRef }

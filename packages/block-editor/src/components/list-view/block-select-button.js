@@ -91,6 +91,11 @@ function ListViewBlockSelectButton(
 		}
 	}, [ labelEditingMode ] );
 
+	const nodeLabel =
+		blockTitle === blockInformation?.title
+			? blockTitle
+			: `${ blockTitle } (${ blockInformation?.title })`;
+
 	return (
 		<>
 			<Button
@@ -147,7 +152,7 @@ function ListViewBlockSelectButton(
 							/>
 						) : (
 							<Truncate ellipsizeMode="auto">
-								{ blockTitle }
+								{ nodeLabel }
 							</Truncate>
 						) }
 					</span>

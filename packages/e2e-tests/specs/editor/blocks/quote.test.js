@@ -156,6 +156,10 @@ describe( 'Quote', () => {
 		await page.keyboard.type( 'b' );
 
 		// Expect "ab" in the paragraph.
-		expect( await getEditedPostContent() ).toMatchSnapshot();
+		expect( await getEditedPostContent() ).toMatchInlineSnapshot( `
+		"<!-- wp:paragraph -->
+		<p>ab</p>
+		<!-- /wp:paragraph -->"
+	` );
 	} );
 } );

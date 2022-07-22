@@ -1159,28 +1159,28 @@ export const removeBlocks =
 			return;
 		}
 
+		const blockOrder = select.getBlockOrder( rootClientId );
+		const { __unstableRemoveEmpty } =
+			select.getBlockListSettings( rootClientId ) || {};
+		const removeEmpty =
+			blockOrder.length === clientIds.length && __unstableRemoveEmpty;
+
 		if ( selectPrevious ) {
-			dispatch.selectPreviousBlock( clientIds[ 0 ] );
+			dispatch.selectPreviousBlock(
+				removeEmpty ? rootClientId : clientIds[ 0 ]
+			);
 		}
 
 		dispatch( { type: 'REMOVE_BLOCKS', clientIds } );
 
-		const blockOrder = select.getBlockOrder( rootClientId );
-		const { __unstableRemoveEmpty } =
-			select.getBlockListSettings( rootClientId ) || {};
-
-		if ( blockOrder.length === 0 && __unstableRemoveEmpty ) {
-			if ( selectPrevious ) {
-				dispatch.selectPreviousBlock( rootClientId );
-			}
-
+		if ( removeEmpty ) {
 			dispatch( { type: 'REMOVE_BLOCKS', clientIds: [ rootClientId ] } );
-		} else {
-			// To avoid a focus loss when removing the last block, assure there
-			// is always a default block if the last of the blocks have been
-			// removed.
-			dispatch( ensureDefaultBlock() );
 		}
+
+		// To avoid a focus loss when removing the last block, assure there
+		// is always a default block if the last of the blocks have been
+		// removed.
+		dispatch( ensureDefaultBlock() );
 	};
 
 /**

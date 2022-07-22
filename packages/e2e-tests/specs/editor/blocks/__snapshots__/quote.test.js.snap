@@ -98,12 +98,6 @@ exports[`Quote can be created by using > at the start of a paragraph block 1`] =
 <!-- /wp:quote -->"
 `;
 
-exports[`Quote can be removed 1`] = `
-"<!-- wp:paragraph -->
-<p>ab</p>
-<!-- /wp:paragraph -->"
-`;
-
 exports[`Quote can be split at the end 1`] = `
 "<!-- wp:quote -->
 <blockquote class=\\"wp-block-quote\\"><!-- wp:paragraph -->

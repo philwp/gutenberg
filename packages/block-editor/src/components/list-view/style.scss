@@ -310,6 +310,13 @@
 			width: 100%;
 			transform: translateY(-50%);
 		}
+
+		/* Match input's text position with non-editable visual state */
+		.components-input-control {
+			height: 24px;
+			position: relative;
+			left: -8px;
+		}
 	}
 
 	.block-editor-list-view-block-select-button__anchor {

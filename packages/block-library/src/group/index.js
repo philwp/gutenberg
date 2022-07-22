@@ -86,11 +86,11 @@ export const settings = {
 	deprecated,
 	variations,
 	__experimentalLabel( attributes, { context } ) {
-		const { alias } = attributes;
+		const { meta } = attributes;
 
 		// In the list view, use the block's aliasattribute as the label.
-		if ( context === 'list-view' && alias ) {
-			return alias;
+		if ( context === 'list-view' && meta?.alias ) {
+			return meta.alias;
 		}
 	},
 };

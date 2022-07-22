@@ -15,12 +15,10 @@
 		"templateLock": {
 			"type": [ "string", "boolean" ],
 			"enum": [ "all", "insert", false ]
-		},
-		"alias": {
-			"type": "string"
 		}
 	},
 	"supports": {
+		"meta": true,
 		"__experimentalOnEnter": true,
 		"__experimentalSettings": true,
 		"align": [ "wide", "full" ],

@@ -65,7 +65,9 @@ function ListViewBlockSelectButton(
 	function onKeyDownHandler( event ) {
 		if ( labelEditingMode && event.keyCode === ENTER ) {
 			updateBlockAttributes( clientId, {
-				alias: inputValue,
+				meta: {
+					alias: inputValue,
+				},
 			} );
 			setLabelEditingMode( false );
 			return;

@@ -12,7 +12,7 @@ import {
 	__experimentalTruncate as Truncate,
 	__experimentalInputControl as InputControl,
 } from '@wordpress/components';
-import { forwardRef, useRef, useState } from '@wordpress/element';
+import { forwardRef, useRef, useState, useEffect } from '@wordpress/element';
 import { Icon, lock } from '@wordpress/icons';
 import { SPACE, ENTER } from '@wordpress/keycodes';
 import { useDispatch } from '@wordpress/data';
@@ -26,6 +26,9 @@ import useBlockDisplayTitle from '../block-title/use-block-display-title';
 import ListViewExpander from './expander';
 import { useBlockLock } from '../block-lock';
 import { store as blockEditorStore } from '../../store';
+
+const SINGLE_CLICK = 1;
+const DOUBLE_CLICK = 2;
 
 function ListViewBlockSelectButton(
 	{
@@ -42,6 +45,7 @@ function ListViewBlockSelectButton(
 	ref
 ) {
 	const clickHandlerTimer = useRef();
+	const inputRef = useRef();
 	const [ labelEditingMode, setLabelEditingMode ] = useState( false );
 
 	const blockInformation = useBlockDisplayInformation( clientId );
@@ -80,6 +84,13 @@ function ListViewBlockSelectButton(
 		}
 	}
 
+	useEffect( () => {
+		if ( labelEditingMode ) {
+			inputRef?.current?.focus();
+			inputRef?.current?.select();
+		}
+	}, [ labelEditingMode ] );
+
 	return (
 		<>
 			<Button
@@ -92,14 +103,15 @@ function ListViewBlockSelectButton(
 
 					if ( labelEditingMode ) {
 						event.preventDefault();
+						event.stopPropagation();
 						return;
 					}
 
-					if ( event.detail === 1 ) {
+					if ( event.detail === SINGLE_CLICK ) {
 						clickHandlerTimer.current = setTimeout( () => {
 							onClick( event );
 						}, 200 );
-					} else if ( event.detail === 2 ) {
+					} else if ( event.detail === DOUBLE_CLICK ) {
 						setLabelEditingMode( true );
 					}
 				} }
@@ -124,9 +136,13 @@ function ListViewBlockSelectButton(
 					<span className="block-editor-list-view-block-select-button__title">
 						{ labelEditingMode ? (
 							<InputControl
+								ref={ inputRef }
 								value={ inputValue }
 								onChange={ ( nextValue ) => {
 									setInputValue( nextValue ?? '' );
+								} }
+								onBlur={ () => {
+									setLabelEditingMode( false );
 								} }
 							/>
 						) : (
